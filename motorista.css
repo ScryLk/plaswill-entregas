@@ -1,0 +1,774 @@
+/* ==========================================================================
+   Plaswill Entregas • Folha de Estilos Exclusiva do Modo Motorista (Mobile)
+   Foco em Ergonomia no Trânsito, Botões Grandes e Alta Legibilidade
+   ========================================================================== */
+
+:root {
+  --pw-bg: #070d18;
+  --pw-surface: #0f172a;
+  --pw-card: #131e33;
+  --pw-card-border: #24344d;
+  --pw-card-delivered: #0d2822;
+  --pw-card-delivered-border: #059669;
+  
+  --pw-yellow: #FFF212;
+  --pw-emerald: #10b981;
+  --pw-emerald-dark: #059669;
+  --pw-waze: #00d6fe;
+  --pw-waze-hover: #38bdf8;
+  --pw-sky: #0284c7;
+  --pw-red: #ef4444;
+  
+  --pw-text: #f8fafc;
+  --pw-text-muted: #94a3b8;
+  --pw-text-dim: #64748b;
+  
+  --font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html, body {
+  background-color: var(--pw-bg);
+  color: var(--pw-text);
+  font-family: var(--font-family);
+  min-height: 100vh;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+  padding-bottom: env(safe-area-inset-bottom, 24px);
+}
+
+/* ==========================================================================
+   TOPBAR MOBILE FIXA
+   ========================================================================== */
+.driver-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: rgba(11, 17, 32, 0.94);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--pw-card-border);
+  padding: calc(10px + env(safe-area-inset-top, 0px)) 16px 10px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  max-width: 580px;
+  margin: 0 auto;
+}
+
+.topbar-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.driver-brand-logo {
+  height: 28px;
+  width: auto;
+  max-width: 72px;
+  object-fit: contain;
+  flex-shrink: 0;
+  display: block;
+}
+
+.brand-divider {
+  width: 1px;
+  height: 20px;
+  background-color: var(--pw-card-border);
+  flex-shrink: 0;
+}
+
+.brand-titles {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.brand-titles h1 {
+  font-size: 13.5px;
+  font-weight: 900;
+  letter-spacing: 0.6px;
+  color: #ffffff;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+.sub-role {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+  color: var(--pw-yellow);
+  text-transform: uppercase;
+  display: block;
+  margin-top: 2px;
+}
+
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.route-chip {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--pw-card-border);
+  color: var(--pw-yellow);
+  font-weight: 800;
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-family: monospace;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+}
+
+.btn-topbar-icon {
+  width: 32px;
+  height: 32px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--pw-card-border);
+  color: var(--pw-text);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.btn-topbar-icon:active {
+  transform: scale(0.92);
+  background: rgba(255, 255, 255, 0.15);
+}
+
+/* ==========================================================================
+   CONTAINER PRINCIPAL
+   ========================================================================== */
+.driver-content {
+  flex: 1;
+  width: 100%;
+  max-width: 580px;
+  margin: 0 auto;
+  padding: 14px 14px 40px 14px;
+}
+
+/* ==========================================================================
+   LOADING & ERROR STATES
+   ========================================================================== */
+.driver-loading-card,
+.driver-error-card {
+  background: var(--pw-card);
+  border: 1px solid var(--pw-card-border);
+  border-radius: 12px;
+  padding: 36px 20px;
+  text-align: center;
+  margin-top: 24px;
+}
+
+.driver-spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid rgba(255, 242, 18, 0.2);
+  border-top-color: var(--pw-yellow);
+  border-radius: 50%;
+  animation: driverSpin 0.8s linear infinite;
+  margin: 0 auto 16px auto;
+}
+
+@keyframes driverSpin {
+  to { transform: rotate(360deg); }
+}
+
+.driver-loading-card p {
+  color: var(--pw-text-muted);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.error-icon-box {
+  width: 52px;
+  height: 52px;
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 16px auto;
+}
+
+.driver-error-card h3 {
+  font-size: 17px;
+  color: #fff;
+  margin-bottom: 6px;
+}
+
+.driver-error-card p {
+  font-size: 13px;
+  color: var(--pw-text-muted);
+  line-height: 1.4;
+  margin-bottom: 20px;
+}
+
+.btn-driver-secondary {
+  display: inline-block;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--pw-card-border);
+  color: #fff;
+  text-decoration: none;
+  padding: 10px 18px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* ==========================================================================
+   PAINEL DE PROGRESSO DA ROTA
+   ========================================================================== */
+.driver-progress-card {
+  background: linear-gradient(180deg, #131e33 0%, #0e1728 100%);
+  border: 1px solid var(--pw-card-border);
+  border-radius: 14px;
+  padding: 16px;
+  margin-bottom: 16px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+}
+
+.progress-info-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.progress-title-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--pw-text-dim);
+  display: block;
+  margin-bottom: 2px;
+}
+
+.progress-counter {
+  font-size: 24px;
+  font-weight: 900;
+  color: #ffffff;
+  letter-spacing: -0.5px;
+}
+
+.progress-counter small {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--pw-text-muted);
+}
+
+.progress-percentage-badge {
+  background: rgba(16, 185, 129, 0.15);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  color: var(--pw-emerald);
+  font-weight: 800;
+  font-size: 14px;
+  padding: 6px 12px;
+  border-radius: 20px;
+}
+
+.progress-track {
+  height: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 12px;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #059669 0%, #10b981 100%);
+  border-radius: 4px;
+  transition: width 0.4s ease;
+}
+
+.progress-meta-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--pw-text-muted);
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  padding-top: 10px;
+}
+
+.meta-origin-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  color: #cbd5e1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meta-origin-badge span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meta-date-badge {
+  font-weight: 500;
+  color: var(--pw-text-dim);
+  flex-shrink: 0;
+}
+
+.btn-jump-next {
+  width: 100%;
+  margin-top: 12px;
+  background: rgba(2, 132, 199, 0.15);
+  border: 1px solid rgba(2, 132, 199, 0.35);
+  color: #38bdf8;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 10px 14px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-jump-next:active {
+  background: rgba(2, 132, 199, 0.3);
+  transform: scale(0.98);
+}
+
+/* ==========================================================================
+   SEGMENTED FILTER TABS
+   ========================================================================== */
+.filter-segmented-tabs {
+  display: flex;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--pw-card-border);
+  border-radius: 8px;
+  padding: 3px;
+  margin-top: 12px;
+  gap: 3px;
+}
+
+.filter-tab {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: var(--pw-text-muted);
+  font-family: inherit;
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 7px 4px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-align: center;
+}
+
+.filter-tab.active {
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+}
+
+/* ==========================================================================
+   BANNER TODAS CONCLUÍDAS
+   ========================================================================== */
+.all-completed-card {
+  background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.4);
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 16px;
+  animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.completed-icon-circle {
+  width: 44px;
+  height: 44px;
+  background: rgba(16, 185, 129, 0.25);
+  border: 1px solid var(--pw-emerald);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.all-completed-card h4 {
+  font-size: 14px;
+  font-weight: 800;
+  color: #10b981;
+  margin-bottom: 2px;
+}
+
+.all-completed-card p {
+  font-size: 12px;
+  color: #cbd5e1;
+  line-height: 1.3;
+}
+
+/* ==========================================================================
+   LISTA DE PARADAS / CARTOES DO MOTORISTA
+   ========================================================================== */
+.driver-stops-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.stop-card {
+  background: var(--pw-card);
+  border: 1px solid var(--pw-card-border);
+  border-radius: 14px;
+  padding: 16px;
+  position: relative;
+  transition: all 0.2s ease;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.2);
+}
+
+.stop-card.is-delivered {
+  background: var(--pw-card-delivered);
+  border-color: var(--pw-card-delivered-border);
+}
+
+/* Topo do Card */
+.stop-card-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.stop-badge-circle {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(2, 132, 199, 0.2);
+  border: 1.5px solid var(--pw-sky);
+  color: #38bdf8;
+  font-weight: 900;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.2s ease;
+}
+
+.stop-card.is-delivered .stop-badge-circle {
+  background: rgba(16, 185, 129, 0.25);
+  border-color: var(--pw-emerald);
+  color: #10b981;
+}
+
+.stop-client-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.stop-client-title {
+  font-size: 15px;
+  font-weight: 800;
+  color: #ffffff;
+  line-height: 1.25;
+  margin-bottom: 4px;
+  word-break: break-word;
+}
+
+.stop-card.is-delivered .stop-client-title {
+  color: #cbd5e1;
+}
+
+.stop-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.stop-status-pill.pending {
+  background: rgba(2, 132, 199, 0.15);
+  border: 1px solid rgba(2, 132, 199, 0.3);
+  color: #38bdf8;
+}
+
+.stop-status-pill.delivered {
+  background: rgba(16, 185, 129, 0.2);
+  border: 1px solid rgba(16, 185, 129, 0.4);
+  color: var(--pw-emerald);
+}
+
+/* Bloco de Endereço */
+.stop-address-box {
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.address-pin-icon {
+  color: var(--pw-yellow);
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.address-text-lines {
+  flex: 1;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.address-street {
+  font-weight: 700;
+  color: #f1f5f9;
+}
+
+.address-neighborhood {
+  font-size: 11.5px;
+  color: var(--pw-text-muted);
+  margin-top: 1px;
+}
+
+/* Linha de Dados da Nota e Volume */
+.stop-meta-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.meta-chip {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #cbd5e1;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.meta-chip.chip-nfe {
+  font-family: monospace;
+  color: var(--pw-yellow);
+  border-color: rgba(255, 242, 18, 0.2);
+  background: rgba(255, 242, 18, 0.05);
+}
+
+.meta-chip.chip-items {
+  color: #38bdf8;
+  border-color: rgba(56, 189, 248, 0.2);
+  background: rgba(56, 189, 248, 0.05);
+}
+
+/* ==========================================================================
+   BOTÕES DE AÇÃO: ERGONOMIA MÁXIMA PARA MOTORISTA NO TRÂNSITO
+   ========================================================================== */
+.stop-actions-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.btn-nav-touch {
+  height: 48px;
+  border-radius: 10px;
+  text-decoration: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-weight: 800;
+  font-size: 13px;
+  letter-spacing: 0.3px;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  transition: all 0.15s ease;
+  white-space: nowrap;
+  padding: 0 8px;
+}
+
+.btn-nav-touch:active {
+  transform: scale(0.96);
+}
+
+/* Waze: Fundo Ciano Vibrante com Letras Pretas */
+.btn-nav-waze {
+  background: #00d6fe;
+  color: #070d18;
+  border: 1px solid #38bdf8;
+}
+
+.btn-nav-waze:hover {
+  background: #38bdf8;
+}
+
+/* Maps: Fundo Escuro com Borda e Destaque Verde/Branco */
+.btn-nav-maps {
+  background: #1e293b;
+  color: #ffffff;
+  border: 1.5px solid #334155;
+}
+
+.btn-nav-maps:hover {
+  background: #334155;
+  border-color: #475569;
+}
+
+/* Botão Marcar como Concluído (Gordo, Toque Fácil) */
+.btn-toggle-delivered {
+  width: 100%;
+  height: 48px;
+  border-radius: 10px;
+  font-family: inherit;
+  font-size: 13.5px;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  border: none;
+}
+
+.btn-toggle-delivered:active {
+  transform: scale(0.97);
+}
+
+/* Estado: Ainda Pendente -> Chama para concluir */
+.btn-toggle-delivered.pending-action {
+  background: rgba(16, 185, 129, 0.18);
+  border: 1.5px solid var(--pw-emerald);
+  color: #10b981;
+}
+
+.btn-toggle-delivered.pending-action:hover {
+  background: rgba(16, 185, 129, 0.3);
+}
+
+/* Estado: Já Entregue -> Verde Sólido com opção de desfazer */
+.btn-toggle-delivered.delivered-action {
+  background: #059669;
+  border: 1.5px solid #10b981;
+  color: #ffffff;
+}
+
+.btn-toggle-delivered.delivered-action:hover {
+  background: #047857;
+}
+
+/* ==========================================================================
+   RODAPÉ MOBILE
+   ========================================================================== */
+.driver-footer {
+  width: 100%;
+  max-width: 580px;
+  margin: 0 auto;
+  padding: 10px 16px 24px 16px;
+  text-align: center;
+  border-top: 1px solid var(--pw-card-border);
+}
+
+.footer-links {
+  margin-bottom: 12px;
+}
+
+.footer-link-desktop {
+  color: var(--pw-text-dim);
+  text-decoration: none;
+  font-size: 12px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  transition: all 0.15s ease;
+}
+
+.footer-link-desktop:hover {
+  color: var(--pw-yellow);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.footer-brand {
+  margin-bottom: 6px;
+}
+
+.footer-brand-logo {
+  height: 22px;
+  width: auto;
+  opacity: 0.7;
+  object-fit: contain;
+}
+
+.footer-copy {
+  font-size: 11px;
+  color: var(--pw-text-dim);
+}
+
+/* ==========================================================================
+   ANIMAÇÕES E RESPONSIVIDADE
+   ========================================================================== */
+@media (min-width: 600px) {
+  body {
+    background-color: #030712;
+  }
+  
+  .driver-topbar,
+  .driver-content,
+  .driver-footer {
+    border-left: 1px solid var(--pw-card-border);
+    border-right: 1px solid var(--pw-card-border);
+    background-color: var(--pw-bg);
+  }
+}

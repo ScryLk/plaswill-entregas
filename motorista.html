@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Plaswill Entregas • Modo Motorista</title>
+  
+  <!-- PWA & Mobile Meta Tags -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Entregas">
+  <meta name="theme-color" content="#0b1120">
+  <meta name="mobile-web-app-capable" content="yes">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23FFF212'><path d='M20 8h-3V4H3c-1.1 0-2 .9-2 2v11h2c0 1.66 1.34 3 3 3s3-1.34 3-3h6c0 1.66 1.34 3 3 3s3-1.34 3-3h2v-5l-3-4zM6 18.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm13.5-9l1.96 2.5H17V9.5h2.5zm-1.5 9c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z'/></svg>">
+
+  <!-- Font Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="motorista.css?v=2">
+</head>
+<body>
+
+  <!-- Topbar Mobile Fixa -->
+  <header class="driver-topbar">
+    <div class="topbar-brand">
+      <img src="img/plaswill_logo.png" alt="Plaswill Embalagens" class="driver-brand-logo">
+      <div class="brand-divider"></div>
+      <div class="brand-titles">
+        <h1>ENTREGAS</h1>
+        <span class="sub-role">MODO MOTORISTA</span>
+      </div>
+    </div>
+
+    <div class="topbar-actions">
+      <span class="route-chip" id="topbar-route-id">ROT-....</span>
+      <button type="button" class="btn-topbar-icon" id="btn-refresh-route" title="Atualizar Rota">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4">
+          <polyline points="23 4 23 10 17 10"></polyline>
+          <polyline points="1 20 1 14 7 14"></polyline>
+          <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+        </svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- Container Principal do Motorista -->
+  <main class="driver-content">
+
+    <!-- Loading State -->
+    <div id="driver-loading" class="driver-loading-card">
+      <div class="driver-spinner"></div>
+      <p>Carregando sua rota de entregas...</p>
+    </div>
+
+    <!-- Error State -->
+    <div id="driver-error" class="driver-error-card" style="display: none;">
+      <div class="error-icon-box">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2.2">
+          <circle cx="12" cy="12" r="10"></circle>
+          <line x1="12" y1="8" x2="12" y2="12"></line>
+          <line x1="12" y1="16" x2="12.01" y2="16"></line>
+        </svg>
+      </div>
+      <h3>Rota não encontrada</h3>
+      <p id="error-message-text">O link acessado é inválido ou a rota ainda não foi gerada pela expedição.</p>
+      <div class="error-actions">
+        <a href="index.html" class="btn-driver-secondary">Abrir Painel Geral</a>
+      </div>
+    </div>
+
+    <!-- Painel de Progresso da Rota -->
+    <div id="driver-progress-panel" class="driver-progress-card" style="display: none;">
+      <div class="progress-info-row">
+        <div>
+          <span class="progress-title-label">Progresso da Rota</span>
+          <h2 class="progress-counter"><span id="count-delivered">0</span> de <span id="count-total">0</span> <small>entregas</small></h2>
+        </div>
+        <div class="progress-percentage-badge" id="progress-percentage">0%</div>
+      </div>
+
+      <!-- Barra de Progresso Animada -->
+      <div class="progress-track">
+        <div class="progress-fill" id="progress-fill-bar" style="width: 0%;"></div>
+      </div>
+
+      <!-- Metadados da Rota (Origem, Data) -->
+      <div class="progress-meta-row">
+        <div class="meta-origin-badge">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#FFF212" stroke-width="2.2">
+            <path d="M2 20h20M6 20V10l6 4V10l6 4v6M4 20h16"></path>
+          </svg>
+          <span id="route-origin-name">Plaswill Indústria (Fábrica)</span>
+        </div>
+        <div class="meta-date-badge" id="route-date-badge">Hoje</div>
+      </div>
+
+      <!-- Atalho: Ir para a Próxima Entrega -->
+      <button type="button" class="btn-jump-next" id="btn-jump-next" style="display: none;">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <line x1="12" y1="5" x2="12" y2="19"></line>
+          <polyline points="19 12 12 19 5 12"></polyline>
+        </svg>
+        <span>Ir para a próxima entrega pendente</span>
+      </button>
+
+      <!-- Filtro Rápido (Segmented Pill) -->
+      <div class="filter-segmented-tabs">
+        <button type="button" class="filter-tab active" data-filter="all" id="tab-filter-all">
+          Todas (<span id="pill-count-all">0</span>)
+        </button>
+        <button type="button" class="filter-tab" data-filter="pending" id="tab-filter-pending">
+          Pendentes (<span id="pill-count-pending">0</span>)
+        </button>
+        <button type="button" class="filter-tab" data-filter="delivered" id="tab-filter-delivered">
+          Concluídas (<span id="pill-count-delivered">0</span>)
+        </button>
+      </div>
+    </div>
+
+    <!-- Banner Todas Concluídas -->
+    <div id="all-completed-banner" class="all-completed-card" style="display: none;">
+      <div class="completed-icon-circle">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="3">
+          <polyline points="20 6 9 17 4 12"></polyline>
+        </svg>
+      </div>
+      <div style="flex: 1;">
+        <h4>Rota 100% Concluída!</h4>
+        <p style="margin-bottom: 8px;">Todas as paradas foram entregues. Bom retorno à fábrica!</p>
+        <button type="button" id="btn-driver-finish-rotina" onclick="window.driverApp.finishCurrentRoute()" style="width: 100%; background: #10b981; color: #fff; border: none; padding: 10px 14px; border-radius: 8px; font-weight: 800; font-size: 0.85rem; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; box-shadow: 0 4px 12px rgba(16,185,129,0.35);">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+          <span>Finalizar e Arquivar Rotina</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Lista de Paradas para o Motorista -->
+    <div id="stops-cards-container" class="driver-stops-list"></div>
+
+  </main>
+
+  <!-- Rodapé Mobile com Opção de Alternar para Painel Geral -->
+  <footer class="driver-footer">
+    <div class="footer-links">
+      <a href="index.html" class="footer-link-desktop">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+          <line x1="8" y1="21" x2="16" y2="21"></line>
+          <line x1="12" y1="17" x2="12" y2="21"></line>
+        </svg>
+        <span>Abrir no Painel de Expedição / Computador</span>
+      </a>
+    </div>
+    <div class="footer-brand">
+      <img src="img/plaswill_logo.png" alt="Plaswill" class="footer-brand-logo">
+    </div>
+    <p class="footer-copy">Plaswill Indústria de Plásticos Ltda • Panambi/RS</p>
+  </footer>
+
+  <!-- Script da Visão do Motorista -->
+  <script src="motorista.js?v=2"></script>
+</body>
+</html>

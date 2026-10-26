@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>PLASWILL INDICATORS — Planejador de Entregas</title>
+  
+  <!-- PWA Meta Tags -->
+  <meta name="theme-color" content="#04070d">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Entregas">
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="img/icon-192.png">
+
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+
+  <!-- Estilos Customizados -->
+  <link rel="stylesheet" href="style.css?v=8">
+</head>
+<body>
+
+  <!-- =========================================================================
+       HEADER DA APLICAÇÃO (PADRÃO OFICIAL PLASWILL INDICATORS)
+       ========================================================================= -->
+  <header class="app-header-plaswill">
+    <div class="brand-section">
+      <!-- Logotipo Oficial da Plaswill -->
+      <img src="img/plaswill_logo.png" alt="Plaswill Embalagens" class="brand-logo">
+      <div class="brand-divider"></div>
+      
+      <!-- Título Padrão Corporativo -->
+      <div class="brand-title">
+        PLASWILL <span>INDICATORS</span>
+      </div>
+      <div class="brand-divider"></div>
+
+      <!-- Breadcrumb Logística -->
+      <div class="header-breadcrumb">
+        <span class="bc-sector">LOGÍSTICA</span>
+        <span class="bc-sep">/</span>
+        <div class="dashboard-title-badge">
+          Rotina de Entregas
+        </div>
+        <span class="badge-rotina-active" id="badge-rotina-active">ROTINA EM ANDAMENTO</span>
+      </div>
+    </div>
+
+    <!-- Ações do Topo -->
+    <div class="header-actions">
+      <!-- Botão Histórico de Rotinas -->
+      <button class="btn-header-history" onclick="window.planner.openHistoryModal()" title="Histórico de Rotinas Anteriores">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+        <span>Histórico</span>
+      </button>
+
+      <!-- Atalho Modo Motorista -->
+      <a href="motorista.html" class="btn-driver-mode-link" title="Abrir Visão do Motorista (Mobile)">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect><line x1="12" y1="18" x2="12.01" y2="18"></line></svg>
+        <span>Modo Motorista</span>
+      </a>
+
+      <!-- Botão Exportar Rota (com QR Code / WhatsApp) -->
+      <button class="btn-export-header" onclick="window.planner.openExportModal()" title="Exportar Rota e Romaneio para o Motorista">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path><polyline points="16 6 12 2 8 6"></polyline><line x1="12" y1="2" x2="12" y2="15"></line></svg>
+        <span>Exportar Rota</span>
+      </button>
+
+      <button class="btn-icon" onclick="window.planner.openModal('modal-settings')" title="Configurações e Origem">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- =========================================================================
+       MAIN CONTENT: MAPA + TABELA DE ENTREGAS
+       ========================================================================= -->
+  <main class="main-content">
+    
+    <!-- BANNER DE ROTA CARREGADA VIA URL / QR CODE -->
+    <div id="route-received-banner" class="route-received-banner" style="display: none;">
+      <div class="banner-text">
+        <span class="banner-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1-18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+        </span>
+        <div>
+          <b>Rota da Expedição Sincronizada!</b>
+          <p id="route-received-desc">Todas as entregas foram carregadas no mapa e na tabela.</p>
+        </div>
+      </div>
+      <button class="btn-close-banner" onclick="document.getElementById('route-received-banner').style.display='none'">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+      </button>
+    </div>
+
+    <!-- MAPA LEAFLET (PONTINHOS DE ENTREGA) -->
+    <div id="map-container" class="map-view">
+      <button class="leaflet-custom-locate-btn" onclick="window.planner.locateDriver()" title="Minha Localização GPS">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="3 11 22 2 13 21 11 13 3 11"></polygon></svg>
+      </button>
+    </div>
+
+    <!-- PAINEL DE CONTROLE E TABELA DE ENTREGAS -->
+    <div class="deliveries-panel">
+      <!-- BARRA SUPERIOR DA TABELA: BOTÃO NOVA ENTREGA & CONTROLES -->
+      <section class="table-toolbar">
+        <div class="toolbar-left">
+          <!-- BOTÃO PRINCIPAL: CRIAR NOVA ENTREGA -->
+          <button class="btn-create-delivery" onclick="window.planner.openModal('modal-create-delivery')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+            <span>Nova Entrega</span>
+          </button>
+
+          <button class="btn-toolbar-action" onclick="window.planner.optimizeSequence()" title="Reorganizar paradas pelo trajeto mais próximo">
+            <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"></path></svg>
+            <span>Otimizar Ordem</span>
+          </button>
+        </div>
+
+        <div class="toolbar-right">
+          <div class="delivery-status-pill">
+            <span class="status-indicator"></span>
+            <span><b id="delivered-stops-count">0</b> de <b id="total-stops-count">0</b> entregues</span>
+          </div>
+
+          <!-- Botão Finalizar Rotina de Entregas -->
+          <button class="btn-finish-rotina" id="btn-finish-rotina" onclick="window.planner.openFinishRotinaModal()" title="Concluir e Arquivar a Rotina de Entregas do Dia">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+            <span>Finalizar Rotina</span>
+          </button>
+        </div>
+      </section>
+
+      <!-- ÁREA DA TABELA BÁSICA DE ENTREGAS -->
+      <section class="table-section">
+        <div class="table-wrapper">
+          <table class="deliveries-table">
+            <thead>
+              <tr>
+                <th style="width: 44px; text-align: center;">#</th>
+                <th style="width: 100px;">Status</th>
+                <th>Destinatário / Cliente</th>
+                <th>Endereço & Bairro</th>
+                <th style="width: 100px;">NF-e</th>
+                <th>Mercadoria / Volumes</th>
+                <th style="width: 180px; text-align: center;">Navegar GPS / Ações</th>
+              </tr>
+            </thead>
+            <tbody id="deliveries-table-body">
+              <!-- Linhas renderizadas dinamicamente via JS -->
+            </tbody>
+          </table>
+
+          <!-- Estado Vazio -->
+          <div class="table-empty-state" id="table-empty-state" style="display: none;">
+            <div class="empty-icon-box">
+              <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>
+            </div>
+            <h3>Nenhuma entrega adicionada hoje</h3>
+            <p>Clique em <b>"+ Nova Entrega"</b> para subir a foto da nota fiscal com IA ou buscar clientes cadastrados no SGE/Obsidian.</p>
+          </div>
+        </div>
+      </section>
+    </div>
+
+  </main>
+
+  <!-- =========================================================================
+       MODAL PRINCIPAL: CRIAR NOVA ENTREGA (FOTO OU MANUAL COM OBSIDIAN)
+       ========================================================================= -->
+  <div class="modal-overlay" id="modal-create-delivery">
+    <div class="modal-card modal-large">
+      <div class="modal-header">
+        <h2>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+          Adicionar Nova Entrega
+        </h2>
+        <button class="btn-close-modal" onclick="window.planner.closeModal('modal-create-delivery')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+      </div>
+
+      <!-- Abas de Entrada: Foto da Nota vs Inserção Manual / Obsidian -->
+      <div class="modal-tabs">
+        <button class="modal-tab-btn active" id="tab-btn-manual" onclick="window.planner.switchCreateTab('manual')">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+          <span>Manual / Buscar Cliente</span>
+        </button>
+        <button class="modal-tab-btn" id="tab-btn-photo" onclick="window.planner.switchCreateTab('photo')">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
+          <span>Foto da Nota (IA)</span>
+        </button>
+      </div>
+
+      <div class="modal-body">
+        
+        <!-- ==================== ABA 1: INSERÇÃO MANUAL & BUSCA OBSIDIAN ==================== -->
+        <div id="tab-content-manual" class="tab-pane active">
+          
+          <!-- Campo de Busca Rápida na Base Obsidian / SGE -->
+          <div class="obsidian-search-card">
+            <div class="obsidian-badge-tag">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
+              <span>Base Obsidian & SGE (1.600+ Clientes)</span>
+            </div>
+            <div class="search-input-wrapper">
+              <svg class="search-input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+              <input type="text" id="manual-client-search" class="search-input" placeholder="Digite o nome do cliente (ex: Gráfica Panambi, Cotripal, Bruning, Roleplast)..." autocomplete="off">
+            </div>
+
+            <!-- Lista Flutuante de Sugestões Instantâneas -->
+            <div class="instant-suggestions" id="manual-suggestions-box" style="display: none;"></div>
+          </div>
+
+          <!-- Formulário Completo de Entrega -->
+          <form id="form-manual-delivery" onsubmit="window.planner.submitManualDelivery(event)" style="display: flex; flex-direction: column; gap: 10px; margin-top: 14px;">
+            <div>
+              <label class="form-label">Destinatário / Razão Social *</label>
+              <input type="text" id="form-destinatario" class="form-input" required placeholder="Nome completo do cliente ou empresa">
+            </div>
+
+            <div style="display: grid; grid-template-columns: 2.5fr 1fr; gap: 10px;">
+              <div>
+                <label class="form-label">Endereço / Logradouro *</label>
+                <input type="text" id="form-logradouro" class="form-input" required placeholder="Rua / Avenida">
+              </div>
+              <div>
+                <label class="form-label">Número *</label>
+                <input type="text" id="form-numero" class="form-input" required placeholder="Ex: 564">
+              </div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1.5fr 1.5fr 1fr; gap: 10px;">
+              <div>
+                <label class="form-label">Bairro</label>
+                <input type="text" id="form-bairro" class="form-input" placeholder="Ex: Moinho Velho">
+              </div>
+              <div>
+                <label class="form-label">Cidade</label>
+                <input type="text" id="form-cidade" class="form-input" value="Panambi">
+              </div>
+              <div>
+                <label class="form-label">UF</label>
+                <input type="text" id="form-uf" class="form-input" value="RS">
+              </div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 10px;">
+              <div>
+                <label class="form-label">NF-e (Opcional)</label>
+                <input type="text" id="form-nfe" class="form-input" placeholder="Ex: 452">
+              </div>
+              <div>
+                <label class="form-label">Mercadorias / Volumes (Opcional)</label>
+                <input type="text" id="form-itens" class="form-input" placeholder="Ex: 1 rolo plástico bolha 50 micras">
+              </div>
+            </div>
+
+            <!-- Coordenadas ocultas ou calculadas -->
+            <input type="hidden" id="form-lat" value="">
+            <input type="hidden" id="form-lon" value="">
+
+            <button type="submit" class="btn-submit-delivery">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8"><polyline points="20 6 9 17 4 12"></polyline></svg>
+              <span>Salvar Entrega na Tabela e Plotar no Mapa</span>
+            </button>
+          </form>
+
+        </div>
+
+        <!-- ==================== ABA 2: FOTO DA NOTA (GEMINI VISION) ==================== -->
+        <div id="tab-content-photo" class="tab-pane" style="display: none;">
+          
+          <input type="file" id="danfe-file-input" accept="image/*" capture="environment" style="display: none;">
+
+          <div class="upload-dropzone" id="danfe-dropzone" onclick="document.getElementById('danfe-file-input').click()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+            <b>Toque para Tirar Foto ou Selecionar DANFE</b>
+            <p>O modelo Gemini Vision lerá o destinatário, endereço, volumes e NF automaticamente.</p>
+          </div>
+
+          <div class="ai-loading-box" id="ai-loading-danfe">
+            <div class="ai-spinner"></div>
+            <p>Gemini Vision analisando o DANFE...</p>
+            <span>Extraindo dados do destinatário e geocodificando localização...</span>
+          </div>
+
+          <div class="upload-preview-area" id="danfe-preview-area">
+            <img id="danfe-preview-img" src="" alt="Preview da Nota Fiscal">
+            
+            <div style="display: flex; flex-direction: column; gap: 8px;">
+              <div>
+                <label class="form-label">Destinatário Reconhecido</label>
+                <input type="text" id="danfe-res-destinatario" class="form-input">
+              </div>
+
+              <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 8px;">
+                <div>
+                  <label class="form-label">Rua / Logradouro</label>
+                  <input type="text" id="danfe-res-logradouro" class="form-input">
+                </div>
+                <div>
+                  <label class="form-label">Número</label>
+                  <input type="text" id="danfe-res-numero" class="form-input">
+                </div>
+              </div>
+
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                <div>
+                  <label class="form-label">Bairro</label>
+                  <input type="text" id="danfe-res-bairro" class="form-input">
+                </div>
+                <div>
+                  <label class="form-label">NF-e</label>
+                  <input type="text" id="danfe-res-nf" class="form-input">
+                </div>
+              </div>
+
+              <div>
+                <label class="form-label">Itens / Volumes</label>
+                <input type="text" id="danfe-res-itens" class="form-input">
+              </div>
+
+              <button id="btn-confirm-danfe" class="btn-submit-delivery" onclick="window.planner.confirmDanfeStop()" style="margin-top: 10px; display: none;">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                <span>Confirmar e Inserir na Tabela</span>
+              </button>
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================================================================
+       MODAL: EXPORTAR ROTA (URL + WHATSAPP + QR CODE + ROMANEIO A4)
+       ========================================================================= -->
+  <div class="modal-overlay" id="modal-export-route">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h2>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path><polyline points="16 6 12 2 8 6"></polyline><line x1="12" y1="2" x2="12" y2="15"></line></svg>
+          Exportar Rota para o Motorista
+        </h2>
+        <button class="btn-close-modal" onclick="window.planner.closeModal('modal-export-route')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+      </div>
+      <div class="modal-body" style="display: flex; flex-direction: column; gap: 16px;">
+        
+        <!-- SEÇÃO 1: LINK DIRETO / WHATSAPP -->
+        <div class="export-box">
+          <div class="export-box-title">
+            <span class="step-num">1</span>
+            <b>Enviar Link para o Motorista (WhatsApp)</b>
+          </div>
+          <p class="export-box-desc">O motorista abre o link no celular e a rota completa é carregada instantaneamente com botões de Waze e Google Maps.</p>
+          
+          <div class="copy-url-group">
+            <input type="text" id="export-share-url-input" class="copy-url-input" readonly value="">
+            <button class="btn-copy-url" id="btn-copy-share-url" onclick="window.planner.copyShareUrl()">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+              <span>Copiar</span>
+            </button>
+          </div>
+
+          <a id="btn-whatsapp-share" href="#" target="_blank" class="btn-whatsapp">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M12.04 2c-5.46 0-9.91 4.45-9.91 9.91 0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38c1.45.79 3.08 1.21 4.74 1.21 5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.816 9.816 0 0 0 12.04 2m.01 1.67c2.2 0 4.26.86 5.82 2.42a8.225 8.225 0 0 1 2.41 5.83c0 4.54-3.7 8.24-8.24 8.24-1.48 0-2.93-.4-4.2-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.196 8.196 0 0 1-1.26-4.38c0-4.54 3.7-8.24 8.24-8.24m4.52 11.53c-.25-.13-1.47-.72-1.7-.81-.23-.08-.39-.13-.56.13-.17.25-.64.81-.79.97-.14.17-.29.19-.54.06-.25-.13-1.06-.39-2.03-1.25-.75-.67-1.26-1.5-1.41-1.75-.14-.25-.02-.39.11-.51.11-.11.25-.29.37-.44.12-.14.17-.25.25-.42.08-.17.04-.31-.02-.44-.06-.13-.56-1.35-.77-1.85-.2-.49-.41-.42-.56-.43h-.48c-.17 0-.44.06-.67.31-.23.25-.88.86-.88 2.1 0 1.24.9 2.44 1.03 2.61.12.17 1.77 2.7 4.29 3.79.6.26 1.07.41 1.44.53.6.19 1.15.16 1.58.1.48-.07 1.47-.6 1.68-1.18.21-.58.21-1.07.15-1.18-.07-.12-.23-.19-.48-.31z"/></svg>
+            <span>Enviar no WhatsApp do Motorista</span>
+          </a>
+        </div>
+
+        <!-- SEÇÃO 2: QR CODE & ROMANEIO IMPRESSO (A4 / PDF) -->
+        <div class="export-box">
+          <div class="export-box-title">
+            <span class="step-num">2</span>
+            <b>Romaneio Impresso com QR Code (Folha A4 / PDF)</b>
+          </div>
+          <p class="export-box-desc">Grampeie esta folha junto às notas físicas. Ao apontar o celular para o QR Code, a rota se abre pronta para dirigir.</p>
+          
+          <div class="qrcode-wrapper">
+            <div id="export-qrcode-box" class="qrcode-box"></div>
+            <div class="qrcode-instruction">
+              <span class="qrcode-pill">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+                <span>QR Code da Rota</span>
+              </span>
+              <p>Escaneie com a câmera do celular para abrir o trajeto no <b>Waze</b> ou <b>Google Maps</b>.</p>
+            </div>
+          </div>
+
+          <button class="btn-print-romaneio" onclick="window.planner.printRomaneio()">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+            <span>Imprimir Romaneio A4 / Salvar PDF</span>
+          </button>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================================================================
+       MODAL: CONFIGURAÇÕES E PONTO DE PARTIDA
+       ========================================================================= -->
+  <div class="modal-overlay" id="modal-settings">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h2>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+          Configurações de Rota
+        </h2>
+        <button class="btn-close-modal" onclick="window.planner.closeModal('modal-settings')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+      </div>
+      <div class="modal-body" style="display: flex; flex-direction: column; gap: 16px;">
+        <div>
+          <label style="font-size: 13px; font-weight: 700; color: #ffffff; margin-bottom: 6px; display: block;">Base de Saída (Origem):</label>
+          <div style="display: flex; flex-direction: column; gap: 8px;">
+            <button class="btn-secondary-action active" onclick="window.planner.setOrigin('plaswill')" style="justify-content: flex-start; text-align: left; gap: 10px; border-color: var(--pw-yellow);">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 20h20M6 20V10l6 4V10l6 4v6M4 20h16"></path></svg>
+              <div><b>Plaswill Indústria (Fábrica)</b> <small style="color: var(--pw-text-muted);">(Distrito Industrial - Av. dos Imigrantes, 1260)</small></div>
+            </button>
+          </div>
+        </div>
+
+        <div style="border-top: 1px solid var(--border-subtle); padding-top: 14px;">
+          <label style="font-size: 13px; font-weight: 700; color: var(--accent-rose); margin-bottom: 6px; display: block;">Gerenciar Dia:</label>
+          <button class="btn-delete-stop" onclick="window.planner.clearAllStops()" style="width: 100%; height: 42px; border-radius: var(--radius-md); font-weight: 600; font-size: 12px; gap: 8px; justify-content: center;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+            <span>Limpar Todas as Entregas do Dia</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================================================================
+       MODAL 5: FINALIZAR ROTINA DE ENTREGAS & FECHAMENTO DE CARGA
+       ========================================================================= -->
+  <div class="modal-overlay" id="modal-finish-rotina">
+    <div class="modal-card" style="max-width: 540px;">
+      <div class="modal-header">
+        <h2>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+          Finalizar Rotina de Entregas
+        </h2>
+        <button class="btn-close-modal" onclick="window.planner.closeModal('modal-finish-rotina')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+      </div>
+      <div class="modal-body" style="display: flex; flex-direction: column; gap: 16px;">
+        
+        <!-- Métricas Rápidas da Rotina -->
+        <div style="display: flex; gap: 10px;">
+          <div class="rotina-metric-card" style="border-top: 3px solid var(--pw-yellow);">
+            <div class="rotina-metric-lbl">Total Paradas</div>
+            <div class="rotina-metric-val" id="finish-total-stops">0</div>
+          </div>
+          <div class="rotina-metric-card" style="border-top: 3px solid #10b981;">
+            <div class="rotina-metric-lbl">Entregues</div>
+            <div class="rotina-metric-val" id="finish-delivered-stops" style="color: #10b981;">0</div>
+          </div>
+          <div class="rotina-metric-card" style="border-top: 3px solid #f59e0b;">
+            <div class="rotina-metric-lbl">Pendentes</div>
+            <div class="rotina-metric-val" id="finish-pending-stops" style="color: #f59e0b;">0</div>
+          </div>
+          <div class="rotina-metric-card" style="border-top: 3px solid #06b6d4;">
+            <div class="rotina-metric-lbl">Eficácia</div>
+            <div class="rotina-metric-val" id="finish-rate-stops" style="color: #06b6d4;">100%</div>
+          </div>
+        </div>
+
+        <!-- Campos de Fechamento -->
+        <div class="form-group">
+          <label style="font-size: 12px; font-weight: 700; color: #cbd5e1; margin-bottom: 5px; display: block;">Motorista Responsável:</label>
+          <input type="text" id="finish-driver-name" class="form-input" value="Motorista da Expedição">
+        </div>
+
+        <div class="form-group">
+          <label style="font-size: 12px; font-weight: 700; color: #cbd5e1; margin-bottom: 5px; display: block;">Veículo / Utilitário:</label>
+          <input type="text" id="finish-vehicle-name" class="form-input" value="Furgão / Utilitário Plaswill">
+        </div>
+
+        <div class="form-group">
+          <label style="font-size: 12px; font-weight: 700; color: #cbd5e1; margin-bottom: 5px; display: block;">Observações do Encerramento (Opcional):</label>
+          <textarea id="finish-notes" class="form-input" rows="2" placeholder="Ex: Todas as entregas conferidas, canhotos arquivados na expedição."></textarea>
+        </div>
+
+        <div style="background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.2); border-radius: 8px; padding: 12px; font-size: 0.78rem; color: #94a3b8; line-height: 1.4;">
+          <b style="color: #10b981;">Ao confirmar:</b> Esta rotina será arquivada no histórico oficial da expedição e a tela será reiniciada para que você possa montar a próxima viagem.
+        </div>
+
+        <!-- Botões de Ação -->
+        <div style="display: flex; gap: 10px; margin-top: 6px;">
+          <button type="button" class="btn-cancel" onclick="window.planner.closeModal('modal-finish-rotina')" style="flex: 1; height: 42px;">Voltar</button>
+          <button type="button" class="btn-finish-rotina" onclick="window.planner.confirmFinishRotina()" style="flex: 1.5; height: 42px; justify-content: center; font-size: 0.85rem;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+            <span>Confirmar e Arquivar</span>
+          </button>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================================================================
+       MODAL 6: HISTÓRICO DE ROTINAS CONCLUÍDAS
+       ========================================================================= -->
+  <div class="modal-overlay" id="modal-rotinas-history">
+    <div class="modal-card" style="max-width: 680px;">
+      <div class="modal-header">
+        <h2>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+          Histórico de Rotinas de Entregas
+        </h2>
+        <button class="btn-close-modal" onclick="window.planner.closeModal('modal-rotinas-history')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div id="rotinas-history-container" style="max-height: 380px; overflow-y: auto;">
+          <div style="text-align: center; padding: 20px; color: var(--pw-text-dim);">Carregando histórico de rotinas...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================================================================
+       FOLHA DE IMPRESSÃO A4 (ROMANEIO & ROTEIRO DE ENTREGAS)
+       Exibida apenas na impressão (@media print)
+       ========================================================================= -->
+  <div id="print-romaneio-sheet" class="print-romaneio-sheet">
+    <div class="print-header">
+      <div class="print-logo-area">
+        <img src="img/plaswill_logo.png" alt="Plaswill" style="height: 38px; width: auto; object-fit: contain; margin-bottom: 4px;">
+        <h1 class="print-title">ROMANEIO & ROTEIRO DE ENTREGAS</h1>
+        <p class="print-subtitle">Expedição e Logística • Panambi - RS</p>
+      </div>
+      <div class="print-meta-box">
+        <div><b>Código:</b> <span id="print-route-code">ROT-XXXX</span></div>
+        <div><b>Data:</b> <span id="print-route-date">23/10/2026</span></div>
+        <div><b>Origem:</b> <span id="print-route-origin">Plaswill Indústria</span></div>
+        <div><b>Total Entregas:</b> <span id="print-route-total">0</span></div>
+      </div>
+      <div class="print-qr-area">
+        <div id="print-qrcode-canvas"></div>
+        <span class="print-qr-label">Escaneie para Navegar (Waze / Google Maps)</span>
+      </div>
+    </div>
+
+    <table class="print-table">
+      <thead>
+        <tr>
+          <th style="width: 38px; text-align: center;">#</th>
+          <th style="width: 70px;">NF-e</th>
+          <th>Destinatário</th>
+          <th>Endereço Completo & Bairro</th>
+          <th>Mercadorias / Volumes</th>
+          <th style="width: 140px;">Recebido por / Assinatura</th>
+        </tr>
+      </thead>
+      <tbody id="print-table-body">
+        <!-- Linhas injetadas dinamicamente via JS -->
+      </tbody>
+    </table>
+
+    <div class="print-footer">
+      <div><b>Controle de Expedição:</b> Romaneio emitido via Sistema de Entregas Plaswill.</div>
+      <div>Horário de Saída: ____:____ &nbsp;&nbsp;&nbsp;&nbsp; Horário de Retorno: ____:____ &nbsp;&nbsp;&nbsp;&nbsp; Assinatura do Motorista: _____________________________</div>
+    </div>
+  </div>
+
+  <!-- Leaflet JS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <!-- Biblioteca Local de QR Code -->
+  <script src="qrcode.min.js"></script>
+  <!-- Aplicação JS -->
+  <script src="app.js?v=8"></script>
+
+</body>
+</html>
