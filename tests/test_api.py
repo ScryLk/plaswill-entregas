@@ -27,7 +27,7 @@ class API(unittest.TestCase):
         with socket.socket() as sock:
             sock.bind(('127.0.0.1', 0)); cls.port = sock.getsockname()[1]
         cls.origin = f'http://127.0.0.1:{cls.port}'
-        env = dict(os.environ, ENTREGAS_DATA_DIR=str(cls.data), ENTREGAS_PUBLIC_ORIGIN=cls.origin,
+        env = dict(os.environ, GED_AUTH_TYPE='gateway', GEMINI_API_KEY='', ENTREGAS_DATA_DIR=str(cls.data), ENTREGAS_PUBLIC_ORIGIN=cls.origin,
                    ENTREGAS_ROLE_GROUPS='{"operator":["test-dispatch"],"supervisor":["test-supervise"]}', PHP_CLI_SERVER_WORKERS='4')
         companies=Path(cls.tmp.name)/'companies.json'
         companies.write_text(json.dumps([{'id':'synthetic-company','nome':'Synthetic Company','fantasia':'Synthetic','logradouro':'Synthetic Street','lat':-28.2,'lon':-53.5}]))

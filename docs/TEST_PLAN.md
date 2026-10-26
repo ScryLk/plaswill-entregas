@@ -57,3 +57,5 @@ No Chromium: navegação/listagem, seleção entre pesquisas/filtros/páginas, r
 PHP lint em todos api/*.php/router.php, node --check nos JS incluindo routines.js, py_compile e git diff --check aprovados. Smoke no adaptador Python reiniciado: shell/JS/CSS novos 200; API de rotinas sem identidade 401; módulos privados e caminho de dados 404. Catálogo corporativo/cache de coordenadas sem alterações.
 
 Não executados: chamadas reais ao GED/Gemini/Nominatim/tiles, operação em VPS, impressão física, validação no PHP-FPM/Caddy de produção e teste com dados operacionais reais. Esta validação não envolveu deploy nem dados operacionais de produção.
+
+Isolamento em staging configurado: os workers temporários dos testes de API/rotinas selecionam explicitamente o gateway sintético do fixture e definem GEMINI_API_KEY vazia, sem herdar o modo OAuth ou uma chave Gemini do processo hospedeiro. Os testes OAuth selecionam seu próprio provedor HTTPS simulado. Isso não altera o modo de autenticação nem as configurações da aplicação em execução. A suíte completa também foi executada com GED_AUTH_TYPE=oauth2 e uma chave Gemini fictícia no processo pai para verificar esse isolamento.
