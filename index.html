@@ -2,6 +2,7 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
+  <meta name="referrer" content="no-referrer">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>PLASWILL INDICATORS — Planejador de Entregas</title>
   
@@ -49,6 +50,9 @@
 
     <!-- Ações do Topo -->
     <div class="header-actions">
+      <span id="corporate-session-status" role="status" aria-live="polite"></span>
+      <a id="corporate-login" class="btn-driver-mode-link" href="api/auth_login.php" hidden>Entrar pelo GED</a>
+      <button id="corporate-logout" class="btn-header-history" type="button" hidden>Sair</button>
       <!-- Botão Histórico de Rotinas -->
       <button class="btn-header-history" onclick="window.planner.openHistoryModal()" title="Histórico de Rotinas Anteriores">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
@@ -579,7 +583,8 @@
   <!-- Biblioteca Local de QR Code -->
   <script src="qrcode.min.js"></script>
   <!-- Aplicação JS -->
-  <script src="app.js?v=8"></script>
+  <script src="session.js?v=1"></script>
+  <script src="app.js?v=9"></script>
 
 </body>
 </html>

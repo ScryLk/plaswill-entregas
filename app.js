@@ -31,18 +31,10 @@ class DeliveryPlanner {
     this.defaultCenter = [-28.2917, -53.5019];
     
     // Base oficial de saída
-    this.bases = {
-      plaswill: {
-        id: 'plaswill',
-        name: 'Plaswill Indústria (Fábrica)',
-        address: 'Av. dos Imigrantes, 1260 - Distrito Industrial',
-        lat: -28.2745,
-        lon: -53.5182
-      }
-    };
-
-    this.currentOrigin = this.loadOrigin();
+    this.bases = {};
+    this.currentOrigin = null;
     this.deliveries = this.loadDeliveries();
+    this.currentRouteId = localStorage.getItem('plaswill_active_route_id');
     this.driverCoords = null;
 
     this.map = null;
@@ -58,6 +50,12 @@ class DeliveryPlanner {
   }
 
   async init() {
+    try {
+      const response = await window.entregasFetch('origin.json', {cache:'no-store'});
+      if (!response.ok) throw new Error('Origem indisponível');
+      this.bases.plaswill = await response.json();
+      this.currentOrigin = this.loadOrigin();
+    } catch (_) { alert('Não foi possível carregar a configuração de origem. Atualize a página.'); return; }
     this.initMap();
     this.bindEvents();
     const hasRouteParam = await this.checkUrlParams();
@@ -385,10 +383,10 @@ class DeliveryPlanner {
               ${ICON_MAPS_SVG(14)}
               <span>Maps</span>
             </a>
-            <button type="button" class="table-btn-status ${isDelivered ? 'is-delivered' : ''}" onclick="event.stopPropagation(); window.planner.toggleDeliveryStatus('${del.id}')" title="${isDelivered ? 'Marcar como Pendente' : 'Marcar como Entregue'}">
+            <button type="button" class="table-btn-status ${isDelivered ? 'is-delivered' : ''}"  title="${isDelivered ? 'Marcar como Pendente' : 'Marcar como Entregue'}">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><polyline points="20 6 9 17 4 12"></polyline></svg>
             </button>
-            <button type="button" class="table-btn-delete" onclick="event.stopPropagation(); window.planner.deleteStop('${del.id}')" title="Excluir Parada">
+            <button type="button" class="table-btn-delete"  title="Excluir Parada">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"></path></svg>
             </button>
           </div>
@@ -398,6 +396,8 @@ class DeliveryPlanner {
         this.panToDelivery(del.id);
       };
 
+      tr.querySelector('.table-btn-status').addEventListener('click', e => { e.stopPropagation(); this.toggleDeliveryStatus(del.id); });
+      tr.querySelector('.table-btn-delete').addEventListener('click', e => { e.stopPropagation(); this.deleteStop(del.id); });
       tableBody.appendChild(tr);
     });
   }
@@ -416,23 +416,38 @@ class DeliveryPlanner {
   // GESTÃO DE ENTREGAS (ADD, TOGGLE, DELETE, REORDER)
   // =========================================================================
   addDelivery(deliveryData) {
+    if (['default_center_jitter','approximate','unresolved'].includes(deliveryData.geocoded_by)) {
+      alert('Localização aproximada. Revise as coordenadas no cadastro manual antes de adicionar a entrega.'); return;
+    }
+    if (this.currentRouteId) { alert('Encerre a rota despachada antes de adicionar novas paradas.'); return; }
     this.deliveries.push(deliveryData);
     this.saveDeliveries();
     this.renderStopsList();
     this.updateMapMarkers();
   }
 
-  toggleDeliveryStatus(id) {
+  async toggleDeliveryStatus(id) {
     const item = this.deliveries.find(d => d.id === id);
     if (!item) return;
-
-    item.status = item.status === 'delivered' ? 'pending' : 'delivered';
-    this.saveDeliveries();
-    this.renderStopsList();
-    this.updateMapMarkers();
+    const status = item.status === 'delivered' ? 'pending' : 'delivered';
+    if (this.currentRouteId) {
+      try {
+        const response = await window.entregasFetch('api/update_route_status.php', {
+          method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({route_id:this.currentRouteId,stop_id:id,status,
+            operation_id:crypto.randomUUID(),expected_version:item.version || 0})
+        });
+        const data = await response.json();
+        if (!response.ok || !data.success) throw new Error(data.error || 'Falha de sincronização');
+        item.version = data.version;
+      } catch (err) { alert(err.message + '. Atualize a rota antes de continuar.'); return; }
+    }
+    item.status = status;
+    this.saveDeliveries(); this.renderStopsList(); this.updateMapMarkers();
   }
 
   deleteStop(id) {
+    if (this.currentRouteId) { alert('Uma rota despachada não pode ter paradas removidas.'); return; }
     if (!confirm('Deseja remover esta parada da lista?')) return;
     this.deliveries = this.deliveries.filter(d => d.id !== id);
     this.saveDeliveries();
@@ -441,6 +456,7 @@ class DeliveryPlanner {
   }
 
   clearAllStops() {
+    if (this.currentRouteId) { alert('Encerre a rotina despachada antes de limpar a lista.'); return; }
     if (this.deliveries.length === 0) return;
     if (!confirm('Tem certeza que deseja limpar todas as entregas do dia?')) return;
     this.deliveries = [];
@@ -460,7 +476,7 @@ class DeliveryPlanner {
     if (btn) btn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="spin-icon"><path d="M21 12a9 9 0 1 1-6.219-8.56"></path></svg> <span>Otimizando...</span>';
 
     try {
-      const response = await fetch('api/optimize_sequence.php', {
+      const response = await window.entregasFetch('api/optimize_sequence.php', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -543,7 +559,7 @@ class DeliveryPlanner {
         const formData = new FormData();
         formData.append('file', file);
 
-        const response = await fetch('api/process_danfe.php', {
+        const response = await window.entregasFetch('api/process_danfe.php', {
           method: 'POST',
           body: formData
         });
@@ -633,7 +649,7 @@ class DeliveryPlanner {
 
       this.searchDebounceTimer = setTimeout(async () => {
         try {
-          const response = await fetch(`api/search_company.php?q=${encodeURIComponent(query)}`);
+          const response = await window.entregasFetch(`api/search_company.php?q=${encodeURIComponent(query)}`);
           const data = await response.json();
 
           if (data.success && data.results && data.results.length > 0) {
@@ -737,7 +753,7 @@ class DeliveryPlanner {
     if (isGeneric) {
       const fullStreet = `${logradouro}${numero ? ', ' + numero : ''}`;
       try {
-        const geoRes = await fetch(`api/geocode.php?q=${encodeURIComponent(fullStreet)}&cidade=${encodeURIComponent(cidade)}&uf=${encodeURIComponent(uf)}`);
+        const geoRes = await window.entregasFetch(`api/geocode.php?q=${encodeURIComponent(fullStreet)}&cidade=${encodeURIComponent(cidade)}&uf=${encodeURIComponent(uf)}`);
         const geoData = await geoRes.json();
         if (geoData.success && geoData.lat && geoData.lon) {
           lat = parseFloat(geoData.lat);
@@ -748,8 +764,8 @@ class DeliveryPlanner {
       }
 
       if (isNaN(lat) || isNaN(lon) || !lat || !lon || (Math.abs(lat - (-28.2917)) < 0.001 && Math.abs(lon - (-53.5019)) < 0.001)) {
-        lat = -28.2917 + (Math.random() - 0.5) * 0.015;
-        lon = -53.5019 + (Math.random() - 0.5) * 0.015;
+        alert('Endereço sem localização confiável. Informe coordenadas verificadas no cadastro manual.');
+        return;
       }
     }
 
@@ -811,7 +827,7 @@ class DeliveryPlanner {
 
     this.searchDebounceTimer = setTimeout(async () => {
       try {
-        const response = await fetch(`api/search_company.php?q=${encodeURIComponent(query.trim())}`);
+        const response = await window.entregasFetch(`api/search_company.php?q=${encodeURIComponent(query.trim())}`);
         const data = await response.json();
         loadingEl.style.display = 'none';
 
@@ -834,7 +850,7 @@ class DeliveryPlanner {
   async loadDefaultSearchSuggestions() {
     const listEl = document.getElementById('search-results-list');
     try {
-      const response = await fetch('api/search_company.php');
+      const response = await window.entregasFetch('api/search_company.php');
       const data = await response.json();
       if (data.success && data.results) {
         this.renderSearchResults(data.results);
@@ -880,7 +896,7 @@ class DeliveryPlanner {
     if (isGeneric && comp.logradouro) {
       try {
         const query = `${comp.logradouro}${comp.numero ? ', ' + comp.numero : ''}`;
-        const res = await fetch(`api/geocode.php?q=${encodeURIComponent(query)}&cidade=${encodeURIComponent(comp.municipio || 'Panambi')}&uf=${encodeURIComponent(comp.uf || 'RS')}`);
+        const res = await window.entregasFetch(`api/geocode.php?q=${encodeURIComponent(query)}&cidade=${encodeURIComponent(comp.municipio || 'Panambi')}&uf=${encodeURIComponent(comp.uf || 'RS')}`);
         const data = await res.json();
         if (data && data.success && data.lat && data.lon) {
           lat = parseFloat(data.lat);
@@ -891,11 +907,14 @@ class DeliveryPlanner {
       }
 
       if (isNaN(lat) || isNaN(lon) || !lat || !lon || (Math.abs(lat - (-28.2917)) < 0.001 && Math.abs(lon - (-53.5019)) < 0.001)) {
-        lat = -28.2917 + (Math.random() - 0.5) * 0.015;
-        lon = -53.5019 + (Math.random() - 0.5) * 0.015;
+        alert('Endereço sem localização confiável. Informe coordenadas verificadas no cadastro manual.');
+        return;
       }
     }
 
+    if (!Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat)>90 || Math.abs(lon)>180) {
+      alert('Empresa sem coordenadas verificadas. Utilize o cadastro manual.'); return;
+    }
     const delivery = {
       id: 'del_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
       destinatario: comp.nome || comp.fantasia,
@@ -1119,23 +1138,30 @@ class DeliveryPlanner {
     if (btn) btn.style.opacity = '0.5';
 
     try {
-      const response = await fetch('api/save_route.php', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          stops: this.deliveries,
-          origin: this.currentOrigin
-        })
-      });
-
-      const res = await response.json();
-      if (!res.success || !res.route_id) {
-        throw new Error(res.error || 'Falha ao salvar rota');
+      let res;
+      if (this.currentRouteId && this.currentShareUrl) {
+        res = {success:true,route_id:this.currentRouteId,share_url:this.currentShareUrl};
+      } else if (this.currentRouteId) {
+        if (!confirm('Gerar um novo link para esta rota? O link anterior deixará de funcionar.')) return;
+        const response = await window.entregasFetch('api/issue_route_access.php', {
+          method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({route_id:this.currentRouteId})
+        });
+        res = await response.json();
+        if (!response.ok || !res.success) throw new Error(res.error || 'Falha ao emitir acesso');
+        res.route_id = this.currentRouteId;
+      } else {
+        const response = await window.entregasFetch('api/save_route.php', {
+          method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({stops:this.deliveries,origin:this.currentOrigin})
+        });
+        res = await response.json();
+        if (!response.ok || !res.success) throw new Error(res.error || 'Falha ao salvar rota');
       }
-
       this.currentRouteId = res.route_id;
+      localStorage.setItem('plaswill_active_route_id', this.currentRouteId);
       const pathBase = window.location.pathname.replace(/\/index\.html$/, '').replace(/\/$/, '');
-      this.currentShareUrl = res.share_url || (window.location.origin + pathBase + '/motorista.html?r=' + res.route_id);
+      this.currentShareUrl = (res.share_url ? new URL(res.share_url, window.location.href).href : null) || (window.location.origin + pathBase + '/motorista.html?r=' + res.route_id);
 
       // Preenche o campo de URL
       const urlInput = document.getElementById('export-share-url-input');
@@ -1249,10 +1275,11 @@ class DeliveryPlanner {
     const routeId = params.get('r') || params.get('id');
 
     if (!routeId) return false;
+    if (!/^ROT-[A-Z0-9]{4}$/.test(routeId)) throw new Error('Rota inválida');
     this.currentRouteId = routeId;
 
     try {
-      const response = await fetch(`api/get_route.php?r=${encodeURIComponent(routeId)}`);
+      const response = await window.entregasFetch(`api/get_route.php?r=${encodeURIComponent(routeId)}`);
       const data = await response.json();
 
       if (data.success && data.route && data.route.stops && data.route.stops.length > 0) {
@@ -1318,7 +1345,18 @@ class DeliveryPlanner {
     const observacoes = document.getElementById('finish-notes')?.value?.trim() || '';
 
     try {
-      const response = await fetch('api/finish_route.php', {
+      if (!this.currentRouteId) {
+        const saved = await window.entregasFetch('api/save_route.php', {
+          method: 'POST', headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({stops:this.deliveries,origin:this.currentOrigin,motorista,veiculo})
+        });
+        const data = await saved.json();
+        if (!saved.ok || !data.success) throw new Error(data.error || 'Falha ao salvar rotina');
+        this.currentRouteId = data.route_id;
+        // Retain the authoritative id across closure retries and page reloads.
+        localStorage.setItem('plaswill_active_route_id', this.currentRouteId);
+      }
+      const response = await window.entregasFetch('api/finish_route.php', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1331,10 +1369,12 @@ class DeliveryPlanner {
       });
 
       const res = await response.json();
-      if (res.success) {
+      if (response.ok && res.success) {
         // Limpa estado ativo
         this.deliveries = [];
         this.currentRouteId = null;
+        this.currentShareUrl = null;
+        localStorage.removeItem('plaswill_active_route_id');
         this.saveDeliveries();
 
         // Limpa URL
@@ -1351,7 +1391,7 @@ class DeliveryPlanner {
 
         alert(`✅ Rotina ${res.route_id} finalizada com sucesso e arquivada no histórico!\nA lista de entregas está limpa e pronta para uma nova rotina.`);
       } else {
-        alert('Erro ao finalizar rotina: ' + (res.message || 'Erro desconhecido'));
+        alert('Erro ao finalizar rotina: ' + (res.error || res.message || 'Erro desconhecido'));
       }
     } catch (e) {
       console.error('Falha ao finalizar rotina:', e);
@@ -1367,7 +1407,7 @@ class DeliveryPlanner {
     container.innerHTML = '<div style="text-align: center; padding: 25px; color: var(--pw-text-dim);">Carregando histórico corporativo...</div>';
 
     try {
-      const response = await fetch('api/get_history.php');
+      const response = await window.entregasFetch('api/get_history.php');
       const data = await response.json();
 
       if (!data.success || !data.history || data.history.length === 0) {
@@ -1400,7 +1440,7 @@ class DeliveryPlanner {
               </div>
             </div>
             <div style="display: flex; gap: 8px;">
-              <button onclick="window.planner.loadArchivedRoute('${this.escapeHtml(item.route_id)}')" style="background: rgba(255, 242, 18, 0.15); border: 1px solid #FFF212; color: #FFF212; padding: 6px 12px; border-radius: 6px; font-weight: 700; font-size: 0.78rem; cursor: pointer;">
+              <button data-archive-route="${this.escapeHtml(item.route_id)}" style="background: rgba(255, 242, 18, 0.15); border: 1px solid #FFF212; color: #FFF212; padding: 6px 12px; border-radius: 6px; font-weight: 700; font-size: 0.78rem; cursor: pointer;">
                 Visualizar Rota
               </button>
             </div>
@@ -1410,6 +1450,7 @@ class DeliveryPlanner {
       html += '</div>';
 
       container.innerHTML = html;
+      container.querySelectorAll('[data-archive-route]').forEach(btn => btn.addEventListener('click', () => this.loadArchivedRoute(btn.dataset.archiveRoute)));
     } catch (e) {
       container.innerHTML = '<div style="text-align: center; padding: 20px; color: #ef4444;">Erro ao carregar histórico corporativo.</div>';
     }
@@ -1422,10 +1463,11 @@ class DeliveryPlanner {
       }
     }
     try {
-      const response = await fetch(`api/get_route.php?r=${encodeURIComponent(routeId)}`);
+      const response = await window.entregasFetch(`api/get_route.php?r=${encodeURIComponent(routeId)}`);
       const data = await response.json();
       if (data.success && data.route && data.route.stops) {
         this.deliveries = data.route.stops;
+        if (!/^ROT-[A-Z0-9]{4}$/.test(routeId)) throw new Error('Rota inválida');
         this.currentRouteId = routeId;
         if (data.route.origin) {
           this.currentOrigin = data.route.origin;

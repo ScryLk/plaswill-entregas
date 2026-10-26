@@ -17,3 +17,10 @@ logs/
 # Rotas dinâmicas temporárias
 data/routes/*.json
 !data/routes/.gitkeep
+
+# Stable persistence locks and interrupted atomic writes (never serve data/).
+data/.store.lock
+data/routes/.write-*
+
+# Native OAuth sessions contain server-side tokens; never version or serve them.
+/data/sessions/

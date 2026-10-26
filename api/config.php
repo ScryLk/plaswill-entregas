@@ -1,28 +1,31 @@
 <?php
 declare(strict_types=1);
 
-header("Access-Control-Allow-Origin: *");
-header("Access-Control-Allow-Methods: GET, POST, OPTIONS");
-header("Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With");
-
-if (($_SERVER["REQUEST_METHOD"] ?? "") === "OPTIONS") {
-    http_response_code(200);
-    exit(0);
+header_remove("X-Powered-By");
+header("Cache-Control: no-store");
+header("X-Content-Type-Options: nosniff");
+header("Referrer-Policy: no-referrer");
+ini_set('display_errors','0');
+require_once __DIR__ . '/runtime.php';
+require_once __DIR__ . '/auth.php';
+set_error_handler(function(int $severity, string $message, string $file, int $line): bool {
+    if (!(error_reporting() & $severity)) return false;
+    throw new ErrorException($message,0,$severity,$file,$line);
+});
+set_exception_handler(function (Throwable $e): void {
+    if ($e instanceof IdentityRejected) jsonResponse(['error'=>'Sessão ou credencial corporativa inválida.'],401);
+    if ($e instanceof IdentityUnavailable) jsonResponse(['error'=>'Serviço de identidade indisponível ou não configurado.'],503);
+    jsonResponse(['error'=>'Falha interna ao processar a solicitação.'],500);
+});
+$endpoint=basename($_SERVER['SCRIPT_NAME']??'');
+$readOnly=in_array($endpoint,['get_route.php','get_history.php','search_company.php','geocode.php','auth_login.php','auth_callback.php','auth_session.php'],true);
+if (($_SERVER['REQUEST_METHOD']??'GET')!==($readOnly?'GET':'POST')) {
+    header('Allow: '.($readOnly?'GET':'POST')); jsonResponse(['error'=>'Método não permitido.'],405);
 }
+if (!in_array($endpoint,['get_route.php','update_route_status.php','finish_route.php','auth_login.php','auth_callback.php','auth_session.php','auth_logout.php'],true)) requireOperator();
 
-// Carregamento seguro da API Key do Gemini (.env ou variável de ambiente)
-$envApiKey = "";
-$envFile = __DIR__ . "/.env";
-if (file_exists($envFile)) {
-    $lines = file($envFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
-    foreach ($lines as $line) {
-        if (str_starts_with(trim($line), "GEMINI_API_KEY=")) {
-            $envApiKey = trim(substr(trim($line), strlen("GEMINI_API_KEY=")), "\"\' ");
-            break;
-        }
-    }
-}
-define("GEMINI_API_KEY", getenv("GEMINI_API_KEY") ?: $envApiKey);
+// Environment takes precedence over the ignored, server-only .env file.
+define('GEMINI_API_KEY', setting('GEMINI_API_KEY'));
 const GEMINI_MODEL = "gemini-2.5-flash";
 
 // Coordenadas centrais de Panambi - RS
@@ -37,12 +40,12 @@ function jsonResponse(array $data, int $status = 200): void {
 }
 
 function getJsonBody(): array {
-    $raw = file_get_contents("php://input");
-    if (!$raw) {
-        return [];
-    }
-    $decoded = json_decode($raw, true);
-    return is_array($decoded) ? $decoded : [];
+    $raw=file_get_contents('php://input',false,null,0,8388609);
+    if (strlen($raw)>8388608) jsonResponse(['error'=>'Corpo muito grande.'],413);
+    try { $object=json_decode($raw,false,64,JSON_THROW_ON_ERROR); }
+    catch (JsonException $e) { invalid('JSON inválido.'); }
+    if (!is_object($object)) invalid('Objeto JSON obrigatório.');
+    return json_decode($raw,true,64,JSON_THROW_ON_ERROR);
 }
 
 /**

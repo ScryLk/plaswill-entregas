@@ -2267,3 +2267,7 @@ body {
   letter-spacing: 0.04em;
 }
 
+
+/* Session controls preserve the existing header style. */
+#corporate-session-status { font-size: .75rem; max-width: 14rem; color: var(--pw-text-dim, #94a3b8); }
+#corporate-login[hidden], #corporate-logout[hidden] { display: none; }

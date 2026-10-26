@@ -52,6 +52,18 @@ class DriverApp {
       return;
     }
 
+    if (!/^ROT-[A-Z0-9]{4}$/.test(this.routeId)) { this.showError('Código de rota inválido.'); return; }
+    const token = new URLSearchParams(location.hash.slice(1)).get('token');
+    if (token && /^[a-f0-9]{64}$/.test(token)) localStorage.setItem('plaswill_token_' + this.routeId, token);
+    history.replaceState({}, '', location.pathname + '?r=' + encodeURIComponent(this.routeId));
+    this.outbox = new DeliveryOutbox(localStorage, this.routeId, e => this.apiFetch('api/update_route_status.php', {
+      method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(e)
+    }));
+    if (token) {
+      this.outbox.items.forEach(e => { if (e.state === 'unauthorized') e.state = 'pending'; });
+      this.outbox.persist();
+    }
+    this.installSync();
     localStorage.setItem('plaswill_last_driver_route', this.routeId);
     document.getElementById('topbar-route-id').textContent = this.routeId;
 
@@ -99,17 +111,18 @@ class DriverApp {
     }
 
     try {
-      const response = await fetch(`api/get_route.php?r=${encodeURIComponent(this.routeId)}`);
+      const response = await this.apiFetch(`api/get_route.php?r=${encodeURIComponent(this.routeId)}`);
       const data = await response.json();
+      if (!response.ok) { const err = new Error(data.error); err.status = response.status; throw err; }
 
       loadingEl.style.display = 'none';
 
-      if (data.success && data.route) {
+      if (response.ok && data.success && data.route) {
         this.routeData = data.route;
-        
+
         // Sincroniza eventuais baixas salvas localmente offline
         this.mergeOfflineState();
-        
+
         this.renderRoute();
         progressPanel.style.display = 'block';
         errorEl.style.display = 'none';
@@ -118,8 +131,9 @@ class DriverApp {
       }
     } catch (err) {
       loadingEl.style.display = 'none';
-      
+
       // Fallback: se estiver offline no meio da entrega, tenta carregar do cache local
+      if (err.status === 401 || err.status === 403) { this.showError('Acesso expirado ou revogado. Solicite novo link.'); return; }
       const cached = localStorage.getItem(this.storageKeyPrefix + this.routeId);
       if (cached) {
         this.routeData = JSON.parse(cached);
@@ -131,27 +145,68 @@ class DriverApp {
     }
   }
 
-  mergeOfflineState() {
-    const cached = localStorage.getItem(this.storageKeyPrefix + this.routeId);
-    if (!cached || !this.routeData || !this.routeData.stops) return;
+  apiFetch(url, options = {}) {
+    const token = localStorage.getItem('plaswill_token_' + this.routeId);
+    return fetch(url, {...options, cache: 'no-store', signal: AbortSignal.timeout(12000),
+      headers: {...options.headers, ...(token ? {Authorization: 'Bearer ' + token} : {})}});
+  }
 
+  installSync() {
+    const status = document.createElement('p'); status.id = 'sync-status'; status.setAttribute('role', 'status');
+    const retry = document.createElement('button'); retry.textContent = 'Atualizar sincronização';
+    retry.addEventListener('click', () => this.outbox.items.some(e => e.state === 'conflict') ? this.resolveConflict() : this.sync(true));
+    const host = document.getElementById('driver-progress-panel'); host.append(status, retry);
+    window.addEventListener('online', () => this.sync());
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) this.sync(); });
+    setInterval(() => { if (!document.hidden) this.sync(); }, 15000);
+    if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+    this.sync();
+  }
+
+  async sync(force = false) {
+    await this.outbox.flush(force);
+    this.showSyncStatus();
+    if (!this.outbox.items.length) await this.loadRoute(true);
+  }
+
+  async resolveConflict() {
+    if (this.outbox.running) return;
+    if (!confirm('Recarregar a versão do servidor e reenviar suas alterações locais sobre ela? Isso pode substituir alterações feitas em outro aparelho.')) return;
     try {
-      const localData = JSON.parse(cached);
-      if (localData && localData.stops) {
-        const localStatusMap = {};
-        localData.stops.forEach(s => {
-          localStatusMap[s.id] = s.status;
-        });
+      const response = await this.apiFetch(`api/get_route.php?r=${encodeURIComponent(this.routeId)}`);
+      const data = await response.json();
+      if (!response.ok || !data.success) throw new Error('Falha ao atualizar rota.');
+      if (data.route.status === 'finished') throw new Error('Rota encerrada. Alterações locais foram preservadas para revisão da expedição.');
+      const states = new Map(data.route.stops.map(s => [s.id, {status:s.status,version:s.version || 0}]));
+      const items = this.outbox.items.map(e => {
+        const stop = states.get(e.stop_id);
+        if (!stop) throw new Error('Parada indisponível. Solicite revisão da expedição.');
+        const next = {...e, operation_id:crypto.randomUUID(),expected_version:stop.version,
+          previous_status:stop.status,state:'pending'};
+        if (stop.status !== e.status) stop.version++;
+        stop.status = e.status;
+        return next;
+      });
+      // Persist the whole replacement before modifying the visible state.
+      this.outbox.storage.setItem(this.outbox.key, JSON.stringify(items));
+      this.outbox.items = items; this.routeData = data.route;
+      this.mergeOfflineState(); this.renderRoute(); await this.sync(true);
+    } catch (err) { alert(err.message); }
+  }
 
-        this.routeData.stops.forEach(s => {
-          if (localStatusMap[s.id] && localStatusMap[s.id] === 'delivered') {
-            s.status = 'delivered';
-          }
-        });
-      }
-    } catch (e) {
-      console.warn('Erro ao mesclar estado offline:', e);
-    }
+  showSyncStatus() {
+    const items = this.outbox?.items || [];
+    const el = document.getElementById('sync-status');
+    if (el) el.textContent = items.some(e => e.state === 'conflict') ?
+      'Conflito: alterações preservadas no aparelho. Atualize a rota e solicite revisão da expedição.' :
+      items.some(e => e.state === 'unauthorized') ? 'Acesso recusado: solicite novo link. Alterações preservadas.' :
+      items.length ? `${items.length} alteração(ões) no aparelho aguardando confirmação do servidor.` :
+      'Sem alterações aguardando envio. Consulte Atualizar para confirmar o estado do servidor.';
+  }
+
+  mergeOfflineState() {
+    this.outbox?.overlay(this.routeData);
+    this.showSyncStatus();
   }
 
   saveLocalCache() {
@@ -246,7 +301,7 @@ class DriverApp {
 
       card.innerHTML = `
         <div class="stop-card-header">
-          <div class="stop-badge-circle" id="badge-circle-${stop.id}">
+          <div class="stop-badge-circle" id="badge-circle-${this.escapeHtml(stop.id)}">
             ${isDelivered ? `
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
                 <polyline points="20 6 9 17 4 12"></polyline>
@@ -255,7 +310,7 @@ class DriverApp {
           </div>
           <div class="stop-client-info">
             <h3 class="stop-client-title">${this.escapeHtml(stop.destinatario || stop.nome_fantasia || 'Cliente')}</h3>
-            <span class="stop-status-pill ${isDelivered ? 'delivered' : 'pending'}" id="status-pill-${stop.id}">
+            <span class="stop-status-pill ${isDelivered ? 'delivered' : 'pending'}" id="status-pill-${this.escapeHtml(stop.id)}">
               ${isDelivered ? `
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg>
                 <span>Concluído</span>
@@ -299,21 +354,21 @@ class DriverApp {
 
         <!-- Botões de Navegação Direta -->
         <div class="stop-actions-grid">
-          <a href="${wazeUrl}" target="_blank" class="btn-nav-touch btn-nav-waze" title="Abrir navegação GPS no Waze">
+          <a href="${wazeUrl}" target="_blank" rel="noopener noreferrer" class="btn-nav-touch btn-nav-waze" title="Abrir navegação GPS no Waze">
             ${ICON_WAZE_SVG(22)}
             <span>Waze</span>
           </a>
-          <a href="${mapsUrl}" target="_blank" class="btn-nav-touch btn-nav-maps" title="Abrir no Google Maps">
+          <a href="${mapsUrl}" target="_blank" rel="noopener noreferrer" class="btn-nav-touch btn-nav-maps" title="Abrir no Google Maps">
             ${ICON_MAPS_SVG(20)}
             <span>Google Maps</span>
           </a>
         </div>
 
         <!-- Botão Marcar como Concluído / Dar Baixa -->
-        <button type="button" 
-                class="btn-toggle-delivered ${isDelivered ? 'delivered-action' : 'pending-action'}" 
-                id="btn-status-${stop.id}" 
-                onclick="window.driverApp.toggleDeliveryStatus('${stop.id}', ${stopNum})">
+        <button type="button"
+                class="btn-toggle-delivered ${isDelivered ? 'delivered-action' : 'pending-action'}"
+                id="btn-status-${this.escapeHtml(stop.id)}"
+                >
           ${isDelivered ? `
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg>
             <span>Entrega Concluída • Desfazer</span>
@@ -324,6 +379,7 @@ class DriverApp {
         </button>
       `;
 
+      card.querySelector('.btn-toggle-delivered').addEventListener('click', () => this.toggleDeliveryStatus(stop.id, stopNum));
       container.appendChild(card);
     });
 
@@ -342,6 +398,10 @@ class DriverApp {
     }
 
     const newStatus = stop.status === 'delivered' ? 'pending' : 'delivered';
+    if (this.routeData.status === 'finished') { alert('Rota encerrada.'); return; }
+    if (this.outbox.items.some(e => ['conflict', 'unauthorized'].includes(e.state))) { alert('Resolva a sincronização antes de registrar novas alterações.'); return; }
+    try { this.outbox.enqueue(stop, newStatus); }
+    catch (_) { alert('Não foi possível salvar no aparelho. A entrega não foi alterada.'); return; }
     stop.status = newStatus;
 
     // Atualiza imediatamente a UI de forma fluida
@@ -388,20 +448,8 @@ class DriverApp {
     this.updateProgress();
     this.applyFilter();
 
-    // Sincroniza em segundo plano com a API
-    try {
-      await fetch('api/update_route_status.php', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          route_id: this.routeId,
-          stop_id: stopId,
-          status: newStatus
-        })
-      });
-    } catch (err) {
-      console.warn('Atualização offline salva localmente:', err);
-    }
+    this.showSyncStatus();
+    await this.sync();
   }
 
   jumpToNextPending() {
@@ -432,6 +480,8 @@ class DriverApp {
   }
 
   async finishCurrentRoute() {
+    await this.sync(true);
+    if (this.outbox.items.length) { alert('Sincronize as alterações pendentes antes de encerrar.'); return; }
     if (!confirm('Deseja concluir e arquivar esta rotina de entregas?')) return;
 
     const btn = document.getElementById('btn-driver-finish-rotina');
@@ -442,7 +492,7 @@ class DriverApp {
     }
 
     try {
-      const response = await fetch('api/finish_route.php', {
+      const response = await this.apiFetch('api/finish_route.php', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -455,7 +505,7 @@ class DriverApp {
       });
 
       const res = await response.json();
-      if (res.success) {
+      if (response.ok && res.success) {
         alert('🎉 Rotina de entregas finalizada e arquivada com sucesso!');
         const banner = document.getElementById('all-completed-banner');
         if (banner) {
@@ -472,7 +522,7 @@ class DriverApp {
           `;
         }
       } else {
-        alert('Erro ao finalizar rota: ' + (res.message || 'Erro desconhecido'));
+        alert('Erro ao finalizar rota: ' + (res.error || res.message || 'Erro desconhecido'));
         if (btn) {
           btn.disabled = false;
           btn.style.opacity = '1';
