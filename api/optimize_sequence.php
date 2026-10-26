@@ -4,15 +4,16 @@ declare(strict_types=1);
 require_once __DIR__ . "/config.php";
 
 $body = getJsonBody();
-$stops = $body["stops"] ?? [];
-$origin = $body["origin"] ?? [
-    "lat" => -28.2745,
-    "lon" => -53.5182,
-    "name" => "Plaswill Indústria"
-];
+$stops = validateStops($body["stops"] ?? null);
+$origin = $body['origin'] ?? readDocument(dirname(__DIR__).'/origin.json');
 
 if (empty($stops) || !is_array($stops)) {
     jsonResponse(["error" => "Lista de paradas vazia."], 400);
+}
+
+validateOrigin($origin);
+foreach ($stops as $stop) {
+    if (in_array($stop['geocoded_by']??'', ['default_center_jitter','approximate','unresolved'],true)) invalid('Revise coordenadas aproximadas antes de otimizar.');
 }
 
 // Heurística do Vizinho Mais Próximo (Nearest Neighbor) para ordenar as paradas

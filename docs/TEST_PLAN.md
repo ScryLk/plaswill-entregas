@@ -1,0 +1,40 @@
+# Testes e evidências
+
+Requer PHP 8.2+ (curl para integração IA), Python e Node. Nenhum teste usa cadastro real, credenciais ou VPS. Gateway simulado existe somente em router temporário dos testes; operações usam diretório temporário. Sem pip/npm install para suites de backend/outbox.
+
+```sh
+ENTREGAS_PHP_BIN=php python3 -m unittest discover -s tests -v
+node --test tests/outbox.test.js
+ENTREGAS_BROWSER_TEST=1 ENTREGAS_PHP_BIN=php python3 -m unittest discover -s tests -v
+```
+
+Browser opt-in requer Playwright e Chromium em /usr/bin/chromium. No ambiente cloud, PHP está em `/workspace/.tools/bin/php`; definir ENTREGAS_PHP_BIN para esse caminho. O código do teste simula identidade via header apenas em router temporário, nunca no produto.
+
+Backend cobre criação/leitura/status, concorrência real com 4 workers PHP, repetição, conflito, desfazer, finalização com payload adulterado, histórico deduplicado, finalização inexistente, rota encerrada, métodos/JSON/coordenadas/status/IDs inválidos, autorização por endpoint, origem hostil, token expirado/revogado/rotacionado, proteção de arquivos internos, colisão determinística, JSON corrompido e falha de escrita sem alterar original. Node cobre 11 casos: três operações offline, reabertura, undo, backoff, recibo inválido, timeout/JSON inválido, HTTP 500/401/403/409, perda de resposta com mesmo ID, quota e exclusão mútua do flush.
+
+Browser real testa shell e Service Worker, reabertura offline, outbox após fechar página, reconexão, desfazer offline, conflito entre dispositivos, rebase confirmado e encerramento remoto enquanto existem eventos pendentes. Fontes externas bloqueadas no teste; nada é enviado a serviços externos.
+
+Checks adicionais: `php -l` em api/*.php e router.php; `python3 -m py_compile server.py`; `node --check` em app.js, motorista.js, outbox.js e sw.js; `git diff --check`.
+
+Não verificados: GED/SSO real, Gemini válido, geocodificação e tiles externos, validação visual/A4 física e execução externa de WhatsApp/Waze/Maps, concorrência entre abas com localStorage, produção PHP-FPM/Caddy, restauração de backup em VPS. Falta de execução não equivale a aprovação. Consultar o relatório da entrega para resultados efetivamente executados.
+
+
+Execução cloud anterior à integração OAuth: 7 testes de integração (incluindo um cenário Chromium composto), 11 testes Node, sintaxe PHP/Python/JS e diff-check aprovados. O browser do painel também exercitou inclusão manual, importação DANFE com resposta mock, Leaflet real servido de fixtures locais verificadas pelo SHA-256/SRI original, otimização, geração do canvas QR, links de WhatsApp/Waze/Maps, preparação do romaneio e histórico. O print foi interceptado, sem impressão física; mapa não baixou tiles reais. Não houve leitura de clientes reais no teste: search_company usa ENTREGAS_COMPANIES_FILE apontando para catálogo sintético.
+
+Para repetir o painel, preparar fora do checkout leaflet.js e leaflet.css da versão 1.9.4 e verificar SHA-256 base64 contra SRI em index.html (não desabilitar verificação). Definir TEST_LEAFLET_DIR para essa pasta, além de ENTREGAS_BROWSER_TEST=1. Sem fixtures, o cenário do motorista ainda executa e o painel é omitido explicitamente pela condição do teste.
+
+
+## Regressão OAuth2 adicionada
+
+`tests/test_oauth.py` usa PHP com sessões reais e `tests/mock_ged.py` como provedor HTTPS local. Certificado efêmero com SAN correto é gerado por openssl e confiado explicitamente por CA no cliente Python/PHP; Chromium confia somente no SPKI do certificado do fixture. Verificação TLS não é desligada para acessar serviços reais.
+
+Cobre state/cookie binding/uso único/cancelamento, troca de código, rotação de sessão e flags de cookie, CSRF/Origin, identificação por OCS + endpoint de grupos, supervisão somente leitura, papéis cumulativos de Diretoria, revogação/expiração, mudança de grupos, outage/redirect/falha OCS/ID divergente/grupos malformados, rejeição de pseudoheaders e logout local durante indisponibilidade, inclusive após reabrir a página. O navegador executa login, fetch com nonce e logout para expedição e supervisão.
+
+Última execução completa nesta evolução:
+
+```sh
+TEST_LEAFLET_DIR=/workspace/.tools ENTREGAS_BROWSER_TEST=1 ENTREGAS_PHP_BIN=/workspace/.tools/bin/php python3 -m unittest discover -s tests -v
+node --test tests/outbox.test.js
+```
+
+Resultado: **15 testes de integração aprovados, sem skips nessa execução, e 11 testes Node aprovados**. Também passaram php -l em todos os PHP, node --check incluindo session.js, py_compile e git diff --check. O diretório de fixtures Leaflet fica fora do checkout, com integridade verificada conforme seção anterior. GED/Nextcloud real e callback registrado ainda não foram validados; os testes não conectam a serviços corporativos.

@@ -3,10 +3,10 @@ declare(strict_types=1);
 
 require_once __DIR__ . "/config.php";
 
-$query = trim($_GET["q"] ?? "");
+$query = textField($_GET["q"] ?? "", 300);
 if (empty($query)) {
     // Retorna as empresas da base local como sugestão padrão
-    $companiesFile = __DIR__ . "/companies_db.json";
+    $companiesFile = (getenv("ENTREGAS_COMPANIES_FILE") ?: __DIR__ . "/companies_db.json");
     $companies = file_exists($companiesFile) ? json_decode(file_get_contents($companiesFile), true) : [];
     jsonResponse(["success" => true, "results" => array_slice($companies, 0, 8)]);
 }
@@ -14,7 +14,7 @@ if (empty($query)) {
 $results = [];
 
 // 1. Busca na base local de empresas
-$companiesFile = __DIR__ . "/companies_db.json";
+$companiesFile = (getenv("ENTREGAS_COMPANIES_FILE") ?: __DIR__ . "/companies_db.json");
 if (file_exists($companiesFile)) {
     $companies = json_decode(file_get_contents($companiesFile), true) ?: [];
     foreach ($companies as $comp) {
@@ -28,7 +28,7 @@ if (file_exists($companiesFile)) {
 }
 
 // 2. Se a busca local não tiver resultados suficientes, consulta o Gemini
-if (count($results) < 3 && strlen($query) >= 3) {
+if (GEMINI_API_KEY && count($results) < 3 && strlen($query) >= 3) {
     $geminiUrl = "https://generativelanguage.googleapis.com/v1beta/models/" . GEMINI_MODEL . ":generateContent?key=" . GEMINI_API_KEY;
 
     $prompt = <<<PROMPT
@@ -90,8 +90,8 @@ PROMPT;
                 $streetQuery = trim(($item["logradouro"] ?? "") . ", " . ($item["numero"] ?? "") . ", " . ($item["bairro"] ?? ""));
                 $geo = geocodeAddress($streetQuery, $item["municipio"] ?? "Panambi", $item["uf"] ?? "RS");
 
-                $lat = $geo ? $geo["lat"] : (PANAMBI_DEFAULT_LAT + (mt_rand(-30, 30) / 10000));
-                $lon = $geo ? $geo["lon"] : (PANAMBI_DEFAULT_LON + (mt_rand(-30, 30) / 10000));
+                $lat = $geo ? $geo["lat"] : null;
+                $lon = $geo ? $geo["lon"] : null;
 
                 $results[] = [
                     "id" => "ai_" . uniqid(),

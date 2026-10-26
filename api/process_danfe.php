@@ -23,6 +23,7 @@ if (!empty($_FILES["file"]["tmp_name"])) {
 } else {
     $input = getJsonBody();
     if (!empty($input["image_base64"])) {
+        if (!is_string($input["image_base64"])) invalid();
         $base64Data = $input["image_base64"];
         // Remove prefixo data URI se existir
         if (preg_match('/^data:([a-zA-Z0-9\/\+]+);base64,(.+)$/', $base64Data, $matches)) {
@@ -38,6 +39,14 @@ if (!empty($_FILES["file"]["tmp_name"])) {
 if (empty($base64Data)) {
     jsonResponse(["error" => "Nenhuma imagem ou nota fiscal fornecida."], 400);
 }
+
+$bytes=base64_decode($base64Data,true);
+if ($bytes===false) invalid('Base64 inválido.');
+if (strlen($bytes)>5242880) jsonResponse(['error'=>'Imagem excede 5 MiB.'],413);
+$info=@getimagesizefromstring($bytes);
+if (!$info || !in_array($info['mime'],['image/jpeg','image/png','image/webp'],true) || $info[0]*$info[1]>40000000) invalid('Imagem inválida ou não suportada.');
+$mimeType=$info['mime'];
+if (!GEMINI_API_KEY) jsonResponse(['error'=>'Serviço de IA não configurado.'],503);
 
 // 2. Chamar o Google Gemini Vision (gemini-2.5-flash)
 $geminiUrl = "https://generativelanguage.googleapis.com/v1beta/models/" . GEMINI_MODEL . ":generateContent?key=" . GEMINI_API_KEY;
@@ -107,7 +116,7 @@ curl_close($ch);
 if ($response === false || $httpCode !== 200) {
     jsonResponse([
         "error" => "Falha na comunicação com IA Gemini Vision.",
-        "details" => $curlError ?: $response,
+
         "code" => $httpCode
     ], 502);
 }
@@ -119,7 +128,7 @@ $extracted = json_decode($rawText, true);
 if (empty($extracted) || empty($extracted["destinatario"])) {
     jsonResponse([
         "error" => "Não foi possível extrair os dados da nota fiscal.",
-        "raw" => $rawText
+        "message" => "Resposta de IA inválida."
     ], 422);
 }
 

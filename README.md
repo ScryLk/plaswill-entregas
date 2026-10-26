@@ -50,16 +50,25 @@ A aplicação atende a duas frentes operacionais integradas:
 
 ## 💻 Como Rodar Localmente (Desenvolvimento)
 
-O projeto possui um servidor Python zero-dependências integrado que simula todos os endpoints da API PHP:
+O frontend continua vanilla. O servidor Python local agora encaminha todas as APIs à implementação PHP compartilhada, incluindo histórico e finalização. Requer Python 3 e PHP 8.2+ com curl. Use somente em desenvolvimento; a autorização falha fechada sem uma integração de identidade configurada e válida. O login OAuth2 nativo GED/Nextcloud está implementado com sessões, CSRF e grupos; a integração real ainda depende de configuração e validação administrativa. Veja [autenticação](docs/AUTHENTICATION.md).
+
+Para testes isolados com identidades sintéticas e sem dados reais:
+
+```bash
+ENTREGAS_PHP_BIN=php python3 -m unittest discover -s tests -v
+node --test tests/outbox.test.js
+```
+
+Para iniciar o shell e APIs locais (operações restritas retornam 401 até existir identidade válida):
 
 ```bash
 # 1. Clonar o repositório
 git clone https://github.com/ScryLk/plaswill-entregas.git
 cd plaswill-entregas
 
-# 2. Configurar a chave de API da IA (opcional, para leitura de DANFE)
-cp api/.env.example api/.env
-# Edite api/.env adicionando sua GEMINI_API_KEY do Google AI Studio
+# 2. PHP deve estar no PATH, ou configure ENTREGAS_PHP_BIN.
+# GEMINI_API_KEY é opcional e deve ser configurada de forma segura.
+# Não copie uma chave fictícia para api/.env.
 
 # 3. Iniciar o servidor
 python3 server.py
@@ -111,7 +120,7 @@ plaswill-entregas/
 
 ## 🔒 Variáveis de Ambiente
 
-Crie o arquivo `api/.env` (não versionado) a partir de `api/.env.example`:
+Configure GEMINI_API_KEY com segurança em ambiente ou api/.env ignorado; não use o placeholder em produção:
 
 ```ini
 GEMINI_API_KEY=sua_chave_gemini_aqui
@@ -123,3 +132,12 @@ GEMINI_API_KEY=sua_chave_gemini_aqui
 
 Propriedade de **Plaswill Indústria de Termoplásticos Ltda** e **Lótus Descartáveis**.  
 Panambi - RS, Brasil.
+
+
+## Segurança e compatibilidade desta evolução
+
+Não implantar sem revisar [segurança](docs/SECURITY_REVIEW.md) e [plano de implantação](DEPLOY.md). Os links antigos ROT-XXXX sozinhos deixam de autorizar o motorista; operadores precisam reemitir links com capacidade por rota. Dados internos devem ser bloqueados pelo web server. A origem padrão está em origin.json; alterações do ponto de saída dependem de confirmação operacional.
+
+[Arquitetura e fluxos](docs/ARCHITECTURE.md) · [Contratos HTTP](docs/API_CONTRACTS.md) · [Testes](docs/TEST_PLAN.md) · [Implementações e pendências](docs/IMPLEMENTATION_PLAN.md).
+
+O botão **Entrar pelo GED** inicia o OAuth2 quando configurado. Nenhuma senha corporativa é capturada. Supervisão é somente leitura; Diretoria/admin têm privilégios cumulativos. Configuração em api/.env.example, com segredo vazio para preenchimento seguro pelo administrador.
