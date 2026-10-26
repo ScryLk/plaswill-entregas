@@ -348,7 +348,7 @@ class DriverApp {
           ` : ''}
           <span class="meta-chip chip-items">
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path></svg>
-            ${this.escapeHtml(stop.itens_resumo || '1 volume')}
+            ${this.escapeHtml(stop.itens_resumo || (stop.volumes != null ? `${stop.volumes} ${stop.volumes === 1 ? 'volume' : 'volumes'}` : '1 volume'))}
           </span>
         </div>
 

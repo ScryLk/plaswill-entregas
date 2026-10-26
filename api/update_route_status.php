@@ -15,7 +15,7 @@ $result=storeLock(function() use($b,$id,$stopId,$status,$op) {
         if ($old['fingerprint']!==$fingerprint) jsonResponse(['error'=>'Operação reutilizada com dados diferentes.'],409);
         return $old['result'];
     }
-    if (($r['status']??'')==='finished') jsonResponse(['error'=>'Rota encerrada.','code'=>'route_finished'],409);
+    if (in_array($r['status']??'',['finished','cancelled'],true)) jsonResponse(['error'=>'Rota encerrada.','code'=>'route_finished'],409);
     $index=null;
     foreach($r['stops'] as $i=>$s) if (($s['id']??null)===$stopId) { $index=$i; break; }
     if ($index===null) jsonResponse(['error'=>'Parada não encontrada.'],404);

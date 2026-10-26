@@ -19,6 +19,7 @@
 
   <!-- Estilos Customizados -->
   <link rel="stylesheet" href="style.css?v=8">
+  <link rel="stylesheet" href="routines.css?v=1">
 </head>
 <body>
 
@@ -80,7 +81,30 @@
   <!-- =========================================================================
        MAIN CONTENT: MAPA + TABELA DE ENTREGAS
        ========================================================================= -->
-  <main class="main-content">
+  <nav class="routine-nav" aria-label="Seções de entregas">
+    <button type="button" id="nav-routines" aria-current="page">Rotinas de Entregas</button>
+    <button type="button" id="nav-planning">Planejamento</button>
+    <button type="button" id="nav-history">Histórico</button>
+  </nav>
+  <section id="routines-view" class="routine-workspace" aria-labelledby="routines-title">
+    <div class="routine-heading"><div><p class="routine-eyebrow">EXPEDIÇÃO / PLANEJAMENTO</p><h1 id="routines-title">Rotinas de Entregas</h1><p>Organize os destinos e salve o planejamento antes de despachar.</p></div><button type="button" class="routine-primary" id="routine-new">+ Nova Rotina</button></div>
+    <form id="routine-filters" class="routine-filters" role="search">
+      <label class="routine-search">Pesquisar rotina<input id="routine-search" name="q" type="search" placeholder="Nome, código ou data" maxlength="200"></label>
+      <label>Situação<select id="routine-status-filter" name="status"><option value="">Todas</option><option value="draft">Rascunho</option><option value="planned">Planejada</option><option value="dispatched">Despachada</option><option value="in_progress">Em andamento</option><option value="finished">Finalizada</option><option value="cancelled">Cancelada</option></select></label>
+      <label>De<input name="from" type="date"></label><label>Até<input name="to" type="date"></label>
+      <label>Ordenação<select name="order"><option value="desc">Mais recentes</option><option value="asc">Mais antigas</option></select></label><button class="routine-secondary" type="submit">Filtrar</button>
+    </form>
+    <p id="routine-list-feedback" role="status" aria-live="polite"></p>
+    <div class="routine-table-scroll"><table class="routine-table"><caption class="sr-only">Rotinas e progresso operacional</caption><thead><tr><th>Rotina</th><th>Data</th><th>Origem</th><th>Motorista</th><th>Veículo</th><th>Destinos</th><th>Entregas</th><th>Progresso</th><th>Situação</th><th>Ações</th></tr></thead><tbody id="routine-list-body"></tbody></table></div>
+    <div id="routine-empty" class="routine-empty" hidden><h2>Seu próximo percurso começa aqui</h2><p>Crie uma rotina para selecionar clientes e organizar as entregas. Rotas anteriores continuam disponíveis no Histórico.</p></div>
+    <div class="routine-pagination"><button type="button" id="routine-prev" class="routine-secondary">Anterior</button><span id="routine-page" aria-live="polite"></span><button type="button" id="routine-next" class="routine-secondary">Próxima</button></div>
+  </section>
+  <section id="routine-plan-bar" class="routine-plan-bar" hidden aria-label="Planejamento selecionado">
+    <div><strong id="routine-current-name"></strong><p id="routine-current-summary"></p><span id="routine-save-status" role="status" aria-live="polite"></span></div>
+    <div class="routine-plan-actions"><button type="button" id="routine-edit-meta" class="routine-secondary">Dados da rotina</button><button type="button" id="routine-select-addresses" class="routine-secondary">Selecionar endereços</button><button type="button" id="routine-save" class="routine-secondary">Salvar rascunho</button><button type="button" id="routine-plan" class="routine-secondary">Marcar planejada</button><button type="button" id="routine-dispatch" class="routine-primary">Despachar Rotina</button><button type="button" id="routine-share" class="routine-secondary" hidden>Compartilhar</button><button type="button" id="routine-finish" class="routine-secondary" hidden>Finalizar</button><button type="button" id="routine-cancel" class="routine-danger">Cancelar rotina</button></div>
+    <div id="routine-conflict" class="routine-conflict" role="alert" hidden><p id="routine-conflict-text"></p><button type="button" id="routine-reload" class="routine-secondary">Carregar versão do servidor</button><button type="button" id="routine-reapply" class="routine-secondary">Reaplicar minhas alterações</button><button type="button" id="routine-download" class="routine-secondary">Baixar cópia das alterações</button></div>
+  </section>
+  <main class="main-content" id="planning-view" hidden>
     
     <!-- BANNER DE ROTA CARREGADA VIA URL / QR CODE -->
     <div id="route-received-banner" class="route-received-banner" style="display: none;">
@@ -578,13 +602,37 @@
     </div>
   </div>
 
+  <dialog id="routine-meta-dialog" class="routine-dialog" aria-labelledby="routine-meta-title">
+    <form id="routine-meta-form"><div class="routine-dialog-heading"><h2 id="routine-meta-title">Nova Rotina</h2><button type="button" data-close="routine-meta-dialog" aria-label="Fechar">×</button></div>
+      <div class="routine-form-grid">
+        <label class="wide">Nome da rotina<input name="name" required maxlength="150" placeholder="Ex.: Entregas da manhã"></label>
+        <label>Data prevista<input name="scheduled_date" type="date" required></label><label>Motorista<input name="motorista" maxlength="300" placeholder="Opcional"></label><label>Veículo<input name="veiculo" maxlength="300" placeholder="Opcional"></label>
+        <label>Origem<input name="origin_name" required maxlength="300"></label><label class="wide">Endereço de saída<input name="origin_address" maxlength="500"></label><label>Latitude da origem<input name="origin_lat" type="number" step="any" min="-90" max="90" required></label><label>Longitude da origem<input name="origin_lon" type="number" step="any" min="-180" max="180" required></label>
+        <label class="wide">Observações<textarea name="notes" maxlength="2000" rows="3"></textarea></label>
+      </div><p class="routine-help">A origem começa com a configuração atual. Altere coordenadas somente após conferir o ponto de saída.</p><p id="routine-meta-error" role="alert"></p><div class="routine-dialog-actions"><button type="button" data-close="routine-meta-dialog" class="routine-secondary">Voltar</button><button type="submit" class="routine-primary">Salvar e continuar</button></div>
+    </form>
+  </dialog>
+  <dialog id="routine-catalog-dialog" class="routine-dialog routine-dialog-wide" aria-labelledby="routine-catalog-title">
+    <div class="routine-dialog-heading"><div><h2 id="routine-catalog-title">Selecionar endereços</h2><p>Pesquise na base cadastrada e mantenha as seleções entre filtros.</p></div><button type="button" data-close="routine-catalog-dialog" aria-label="Fechar">×</button></div>
+    <form id="catalog-filters" class="routine-filters" role="search"><label class="routine-search">Buscar clientes ou endereços<input type="search" name="q" id="catalog-search" placeholder="Empresa, código, rua, bairro ou CEP" maxlength="300"></label><label>Município<select name="city"><option value="">Todos</option></select></label><label>Bairro<select name="district"><option value="">Todos</option></select></label><label>Coordenadas<select name="geocoded"><option value="">Todas</option><option value="yes">Disponíveis</option><option value="no">A conferir</option></select></label></form>
+    <p id="catalog-feedback" role="status" aria-live="polite"></p><div class="routine-table-scroll catalog-table"><table class="routine-table"><caption class="sr-only">Endereços do cadastro corporativo</caption><thead><tr><th>Selecionar</th><th>Cliente / fantasia</th><th>Endereço</th><th>Bairro / município</th><th>Localização</th><th>Ações</th></tr></thead><tbody id="catalog-body"></tbody></table></div>
+    <div class="routine-pagination"><button type="button" id="catalog-prev" class="routine-secondary">Anterior</button><span id="catalog-page"></span><button type="button" id="catalog-next" class="routine-secondary">Próxima</button></div><div class="routine-selection"><strong id="catalog-selected-count" aria-live="polite">0 endereços selecionados</strong><button type="button" id="catalog-clear" class="routine-secondary">Limpar seleção</button><button type="button" id="catalog-confirm" class="routine-primary">Adicionar à rotina</button></div>
+    <details><summary>Revisar selecionados</summary><ul id="catalog-selected-list" class="routine-selected-list"></ul></details>
+  </dialog>
+  <dialog id="routine-delivery-dialog" class="routine-dialog" aria-labelledby="routine-delivery-title"><form id="routine-delivery-form">
+    <div class="routine-dialog-heading"><h2 id="routine-delivery-title">Conferir entrega e endereço</h2><button type="button" data-close="routine-delivery-dialog" aria-label="Fechar">×</button></div>
+    <div class="routine-form-grid"><label class="wide">Destinatário<input name="destinatario" required maxlength="500"></label><label class="wide">Logradouro<input name="logradouro" maxlength="500"></label><label>Número<input name="numero" maxlength="100"></label><label>Complemento<input name="complemento" maxlength="300"></label><label>Bairro<input name="bairro" maxlength="300"></label><label>Município<input name="municipio" maxlength="100"></label><label>UF<input name="uf" maxlength="2"></label><label>CEP<input name="cep" maxlength="20"></label><label>Latitude<input name="lat" type="number" step="any" min="-90" max="90"></label><label>Longitude<input name="lon" type="number" step="any" min="-180" max="180"></label><label>Nota fiscal<input name="numero_nota" maxlength="100"></label><label>Volumes<input name="volumes" type="number" min="0" max="100000" step="1"></label><label class="wide">Resumo<input name="itens_resumo" maxlength="2000"></label><label class="wide">Observações<textarea name="observacoes" maxlength="2000" rows="2"></textarea></label></div>
+    <label class="routine-check"><input type="checkbox" name="verified"> Coordenadas conferidas para este endereço</label><p class="routine-help">Sem confirmação, a entrega fica sinalizada para revisão e não será posicionada no mapa nem despachada.</p><p id="routine-delivery-error" role="alert"></p><div class="routine-dialog-actions"><button type="button" id="routine-geocode" class="routine-secondary">Geocodificar endereço</button><button type="submit" class="routine-primary">Aplicar à seleção</button></div>
+  </form></dialog>
+  <dialog id="routine-dispatch-dialog" class="routine-dialog" aria-labelledby="routine-dispatch-title"><div class="routine-dialog-heading"><h2 id="routine-dispatch-title">Conferência do despacho</h2><button type="button" data-close="routine-dispatch-dialog" aria-label="Fechar">×</button></div><div id="routine-dispatch-review"></div><p id="routine-dispatch-error" role="alert"></p><div class="routine-dialog-actions"><button type="button" data-close="routine-dispatch-dialog" class="routine-secondary">Revisar planejamento</button><button type="button" id="routine-dispatch-confirm" class="routine-primary">Confirmar despacho</button></div></dialog>
   <!-- Leaflet JS -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
   <!-- Biblioteca Local de QR Code -->
   <script src="qrcode.min.js"></script>
   <!-- Aplicação JS -->
   <script src="session.js?v=1"></script>
-  <script src="app.js?v=9"></script>
+  <script src="app.js?v=10"></script>
+  <script src="routines.js?v=1"></script>
 
 </body>
 </html>

@@ -9,6 +9,7 @@ $result=storeLock(function() use($b) {
         jsonResponse(['error'=>'Salve a rotina antes de finalizar.','code'=>'save_before_finish'],409);
     }
     $id=routeId($b['route_id']??$b['r']); $r=loadRoute($id); authorizeRoute($r);
+    if (($r['status']??'')==='cancelled') jsonResponse(['error'=>'Rota cancelada.'],409);
     if (($r['status']??'')!=='finished') {
         $r['status']='finished'; $r['finished_at']=date('c'); $r['finished_data_formatada']=date('d/m/Y H:i');
         $r['observacoes_fechamento']=textField($b['observacoes']??'',2000);

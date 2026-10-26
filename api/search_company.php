@@ -3,6 +3,10 @@ declare(strict_types=1);
 
 require_once __DIR__ . "/config.php";
 
+if (($_GET['mode']??'')==='catalog') {
+    require_once __DIR__.'/catalog.php';
+    jsonResponse(catalogResults($_GET));
+}
 $query = textField($_GET["q"] ?? "", 300);
 if (empty($query)) {
     // Retorna as empresas da base local como sugestão padrão

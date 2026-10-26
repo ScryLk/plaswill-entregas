@@ -38,3 +38,22 @@ node --test tests/outbox.test.js
 ```
 
 Resultado: **15 testes de integração aprovados, sem skips nessa execução, e 11 testes Node aprovados**. Também passaram php -l em todos os PHP, node --check incluindo session.js, py_compile e git diff --check. O diretório de fixtures Leaflet fica fora do checkout, com integridade verificada conforme seção anterior. GED/Nextcloud real e callback registrado ainda não foram validados; os testes não conectam a serviços corporativos.
+
+## Gestão de rotinas — execução local
+
+A evolução em feat/gestao-rotinas acrescenta tests/test_routines.py e tests/routines-browser.cjs. Última regressão completa: **25 testes de integração aprovados, sem skips, e 11 testes Node da outbox aprovados**.
+
+Comando executado:
+
+```sh
+TEST_LEAFLET_DIR=/workspace/.tools ENTREGAS_BROWSER_TEST=1 ENTREGAS_PHP_BIN=/workspace/.tools/bin/php python3 -m unittest discover -s tests -v
+node --test tests/outbox.test.js
+```
+
+O módulo cobre rascunho vazio, idempotência da criação, metadados persistidos e várias rotinas da mesma data, snapshots/duplicidade de endereço, edição/remoção/reordenação/otimização, versões e edições concorrentes, despacho concorrente sem duplicação, recuperação de falha entre gravações de rota e rotina, progresso do motorista, finalização/histórico, cancelamento e revogação preservando entregas realizadas, cancelamento interrompido e JSON corrompido, permissões, filtros/paginação e exclusão de CNPJ/telefone no catálogo.
+
+No Chromium: navegação/listagem, seleção entre pesquisas/filtros/páginas, revisão/geocodificação simulada de endereço sem coordenadas, confirmação de entrega duplicada, edição de NF/volumes, remoção/reordenação/otimização, backend independente do localStorage de outro cliente, persistência de mudanças feitas durante save em andamento, conflito/recarga/reaplicação com cópia preservada, associação de links de duas rotinas, cancelamento, responsividade e consulta quando Leaflet está indisponível. Capturas visuais inspecionadas com dados sintéticos, sem tiles ou cadastros reais.
+
+PHP lint em todos api/*.php/router.php, node --check nos JS incluindo routines.js, py_compile e git diff --check aprovados. Smoke no adaptador Python reiniciado: shell/JS/CSS novos 200; API de rotinas sem identidade 401; módulos privados e caminho de dados 404. Catálogo corporativo/cache de coordenadas sem alterações.
+
+Não executados: chamadas reais ao GED/Gemini/Nominatim/tiles, operação em VPS, impressão física, validação no PHP-FPM/Caddy de produção e teste com dados operacionais reais. Esta validação não envolveu deploy nem dados operacionais de produção.

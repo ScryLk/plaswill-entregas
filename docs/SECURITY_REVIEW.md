@@ -24,3 +24,8 @@ Token do motorista: 32 bytes aleatórios, hash SHA-256 no servidor, escopo de um
 - Texto/JSON/IDs/status/coordenadas/paradas validados. Não há auditoria exaustiva de todo output da IA nem de todas as superfícies XSS legadas. Handlers dinâmicos de IDs do motorista, tabela e histórico foram substituídos por listeners.
 - APIs legadas sem versão não garantem resolução de eventos fora de ordem; restringir após migração.
 - Sem observabilidade e alertas corporativos configurados. Erros externos da IA não retornam mais payload bruto/segredos ao cliente.
+
+
+## Superfície do módulo de rotinas
+
+Os endpoints de rotinas exigem sessão corporativa/gateway validado. Supervisão só lê; escrita/catálogo continuam para expedição/admin com CSRF quando OAuth. Motorista não acessa RUT pelo Bearer de ROT. Catálogo paginado omite CNPJ/telefone e não invoca Gemini. Planejamento aceita coordenadas não confirmadas como pendência, sem marcadores fictícios ou despacho. Dados de rotina e cópias locais são informação operacional: bloquear data/routines no servidor e preservar permissões/backup/retenção. Não existe segregação multiempresa nesta aplicação; operadores colaboram no mesmo contexto corporativo. Cancelamento não exclui dados e revoga a capacidade da rota. Os riscos anteriores de retenção no aparelho, auditoria e rate limits permanecem.

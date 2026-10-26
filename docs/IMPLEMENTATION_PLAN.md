@@ -13,4 +13,10 @@ Antes de produção:
 7. Resolver duplicação potencial de criação em timeout com chave idempotente e recuperação segura do link; atualmente recibos cobrem atualizações e encerramento.
 8. Confirmar ponto físico de saída antes de mudar origem. Auditar coordenadas genéricas legadas; não migrar SQLite sem evidência e plano aprovado.
 
-Não houve deploy, commit, push, PR, acesso à VPS, alteração de credenciais ou dados corporativos. Mudanças estão sujeitas à revisão local e não representam conclusão de todas as fases solicitadas.
+A implementação local não realizou deploy, acesso à VPS ou alteração de credenciais/dados corporativos. Publicação e revisão de código são etapas separadas da implantação; as pendências listadas continuam aplicáveis.
+
+## Evolução local: gestão de rotinas
+
+Implementado módulo com listagem, criação de rascunhos persistentes, catálogo paginado sem Gemini, seleção múltipla, snapshots de entregas, edição/ordenação/otimização no planner, versões/conflitos, despacho idempotente, progresso/finalização e cancelamento com revogação. Documentação em ROUTINES.md; regressão completa em TEST_PLAN.md. Criação e despacho do novo módulo têm idempotência; a pendência de idempotência da criação avulsa no endpoint save_route.php legado continua distinta.
+
+Próxima etapa externa: revisão e homologação da branch publicada com configuração real do GED, seguidas de autorização específica para eventual ativação em produção. Atualizar allowlist do web server para os dois endpoints públicos e bloquear módulos/dados privados antes de produção. Não há variável nova ou migração obrigatória do legado.

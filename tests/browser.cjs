@@ -45,7 +45,8 @@ const assert = require('node:assert/strict');
   await page.evaluate(()=>driverApp.finishCurrentRoute());
   assert.equal(await page.evaluate(()=>driverApp.outbox.items.length),1);
   // CacheStorage must hold static resources only.
-  const keys=await page.evaluate(async()=>{const c=await caches.open('plaswill-driver-v1');return (await c.keys()).map(r=>r.url);});
+  const keys=await page.evaluate(async()=>{const c=await caches.open('plaswill-driver-v2');return (await c.keys()).map(r=>r.url);});
+  assert(keys.length>0);
   assert(keys.every(k=>!k.includes('/api/')&&!k.includes('token=')));
   assert.deepEqual(errors,[]);
   if (process.env.TEST_LEAFLET_DIR) {
@@ -60,6 +61,7 @@ const assert = require('node:assert/strict');
       {id:'synthetic-desktop-b',lat:-28.2,lon:-53.5,status:'pending',destinatario:'Synthetic B',logradouro:'Synthetic street'}
     ])));
     await p.goto(base+'/');await p.waitForFunction(()=>window.planner?.map && window.planner.deliveries.length===2);
+    await p.click('#nav-planning');
     assert.equal(await p.locator('.leaflet-container').count(),1);
     await p.evaluate(async()=>{
       const values={'form-destinatario':'Synthetic Manual','form-logradouro':'Synthetic Street','form-numero':'1','form-lat':'-28.25','form-lon':'-53.51'};

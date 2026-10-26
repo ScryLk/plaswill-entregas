@@ -2,6 +2,10 @@
 
 A configuração legada abaixo não é suficiente para esta versão. Não realizar rollout antes de validar identidade, deny rules e migração de links. Os servidores embutidos PHP/Python são somente de desenvolvimento; remover a antiga opção de produção via Python/systemd.
 
+## Módulo de rotinas
+
+Antes de publicar esta evolução, adicionar routine_read.php/routine_write.php à allowlist PHP e routines.js/routines.css aos estáticos. Bloquear api/catalog.php, api/routines.php e data/routines/. Incluir routines/ no backup e garantir escrita pelo mesmo usuário/protocolo de lock dos demais JSON. Não é necessária conversão de rotas antigas. Atualização do shell motorista usa cache v2 e JS v4 sem limpar operações offline. Ver docs/ROUTINES.md. Esta etapa continua sem autorização de deploy.
+
 ## Checklist sequencial e rollback
 
 1. **Backup verificado:** congelar writers legados durante a janela; copiar checkout, configuração fora do repo, data/ completo e índice histórico com permissões, timestamps e hashes. Guardar de forma protegida. Restaurar em diretório isolado e validar JSON, contagens, códigos, histórico e rotas conhecidas com dados autorizados. Backup sem ensaio não basta.
