@@ -41,7 +41,7 @@ Resultado: **15 testes de integração aprovados, sem skips nessa execução, e 
 
 ## Gestão de rotinas — execução local
 
-A evolução em feat/gestao-rotinas acrescenta tests/test_routines.py e tests/routines-browser.cjs. Última regressão completa: **25 testes de integração aprovados, sem skips, e 11 testes Node da outbox aprovados**.
+A evolução em feat/gestao-rotinas acrescenta tests/test_routines.py, tests/routines-browser.cjs e tests/history-browser.cjs. Última regressão completa: **26 testes de integração aprovados, sem skips, e 11 testes Node da outbox aprovados**.
 
 Comando executado:
 
@@ -59,3 +59,5 @@ PHP lint em todos api/*.php/router.php, node --check nos JS incluindo routines.j
 Não executados: chamadas reais ao GED/Gemini/Nominatim/tiles, operação em VPS, impressão física, validação no PHP-FPM/Caddy de produção e teste com dados operacionais reais. Esta validação não envolveu deploy nem dados operacionais de produção.
 
 Isolamento em staging configurado: os workers temporários dos testes de API/rotinas selecionam explicitamente o gateway sintético do fixture e definem GEMINI_API_KEY vazia, sem herdar o modo OAuth ou uma chave Gemini do processo hospedeiro. Os testes OAuth selecionam seu próprio provedor HTTPS simulado. Isso não altera o modo de autenticação nem as configurações da aplicação em execução. A suíte completa também foi executada com GED_AUTH_TYPE=oauth2 e uma chave Gemini fictícia no processo pai para verificar esse isolamento.
+
+Regressão de troca para o histórico: tests/history-browser.cjs usa diretório temporário próprio e verifica cancelamento e falha de consulta preservando o contexto da rotina; troca confirmada limpando URL de compartilhamento, WhatsApp e QR Codes; rejeição de link em memória pertencente a outra rota; impossibilidade de contornar o bloqueio de reemissão para rotas finalizadas; emissão correta para a rota ativa selecionada, sem revogar o token de outra rotina. O cenário falhou antes da correção e passou após ela. A regressão completa acima foi repetida com esse caso incluído; 37 verificações de sintaxe PHP/JS/Python e git diff --check também passaram. Nenhum dado operacional ou serviço corporativo real foi utilizado.

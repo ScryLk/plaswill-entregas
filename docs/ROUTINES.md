@@ -82,11 +82,13 @@ Cancelamento de rotina despachada grava primeiro status/auditoria/revogação na
 
 Rotas legadas permanecem consultáveis e aparecem no histórico existente, sem conversão artificial para RUT. Planejamento avulso anterior continua acessível em Planejamento quando nenhuma rotina está selecionada. Inclusão manual, DANFE, busca individual, Leaflet/markers sobrepostos, otimizador, QR, links, A4 e outbox reutilizam os componentes existentes.
 
+Abrir uma rota pelo histórico só troca o contexto após confirmação e resposta válida do servidor; cancelamento ou erro preservam a rotina selecionada. Uma troca concluída limpa o link, WhatsApp e QR Codes anteriores e atualiza a URL da página. A exportação confere origem, caminho e identificador da rota antes de reutilizar um link em memória; um link de outra rota é descartado e a emissão segue as regras do backend, inclusive o bloqueio para rotas encerradas.
+
 Volume é um campo inteiro opcional, aceito no snapshot de rota e exibido no painel/motorista/romaneio quando não existe resumo textual. O shell do motorista passou ao cache v2 e motorista.js?v=4, sem apagar outbox/localStorage nem forçar ativação em abas abertas.
 
 Em produção, adicionar routine_read.php e routine_write.php à allowlist do web server e permitir routines.js/routines.css. Negar catalog.php, routines.php e todo data/routines/. router.php implementa isso apenas no servidor de desenvolvimento. Incluir routines/ e sessões/rotas no plano de backup protegido. Não mover dados operacionais ou aplicar configurações de VPS automaticamente.
 
-Não há dependência nova nem variável obrigatória nova. Permanecem as pendências anteriores de validação GED real, segredos/callbacks, rate limiting/auditoria central, coordenação de abas da outbox e ensaio de produção. Nada foi implantado ou publicado nesta implementação.
+Não há dependência nova nem variável obrigatória nova. Permanecem as pendências anteriores de validação GED real, segredos/callbacks, rate limiting/auditoria central, coordenação de abas da outbox e ensaio de produção. O código está publicado na branch de revisão; a implantação em produção não foi realizada nesta implementação.
 
 ## Validação manual
 
@@ -105,5 +107,5 @@ A implementação e os testes foram realizados localmente. A publicação do có
 
 - Backend: `api/auth.php`, `api/catalog.php`, `api/config.php`, `api/finish_route.php`, `api/issue_route_access.php`, `api/routine_read.php`, `api/routine_write.php`, `api/routines.php`, `api/runtime.php`, `api/search_company.php`, `api/update_route_status.php`.
 - Interface e runtime: `DEPLOY.md`, `README.md`, `app.js`, `index.html`, `motorista.html`, `motorista.js`, `router.php`, `routines.css`, `routines.js`, `server.py`, `sw.js`.
-- Testes: `tests/browser.cjs`, `tests/routines-browser.cjs`, `tests/test_api.py`, `tests/test_oauth.py`, `tests/test_routines.py`.
+- Testes: `tests/browser.cjs`, `tests/history-browser.cjs`, `tests/routines-browser.cjs`, `tests/test_api.py`, `tests/test_oauth.py`, `tests/test_routines.py`.
 - Documentação e proteção de arquivos: `.gitignore`, `docs/API_CONTRACTS.md`, `docs/ARCHITECTURE.md`, `docs/IMPLEMENTATION_PLAN.md`, `docs/ROUTINES.md`, `docs/SECURITY_REVIEW.md`, `docs/TEST_PLAN.md`.

@@ -1146,6 +1146,13 @@ class DeliveryPlanner {
 
     try {
       let res;
+      if (this.currentShareUrl) {
+        try {
+          const cached = new URL(this.currentShareUrl, window.location.href);
+          const target = new URL('motorista.html', window.location.href);
+          if (!this.currentRouteId || cached.origin !== target.origin || cached.pathname !== target.pathname || cached.searchParams.get('r') !== this.currentRouteId) this.clearShareUrl();
+        } catch (_) { this.clearShareUrl(); }
+      }
       if (this.currentRouteId && this.currentShareUrl) {
         res = {success:true,route_id:this.currentRouteId,share_url:this.currentShareUrl};
       } else if (this.currentRouteId) {
@@ -1173,6 +1180,14 @@ class DeliveryPlanner {
     } finally {
       if (btn) btn.style.opacity = '1';
     }
+  }
+
+  clearShareUrl() {
+    this.currentShareUrl = null;
+    const input = document.getElementById('export-share-url-input');
+    if (input) input.value = '';
+    document.getElementById('btn-whatsapp-share')?.removeAttribute('href');
+    for (const id of ['export-qrcode-box', 'print-qrcode-canvas']) document.getElementById(id)?.replaceChildren();
   }
 
   presentShareUrl(shareUrl) {
@@ -1466,18 +1481,20 @@ class DeliveryPlanner {
     }
   }
 
-  async loadArchivedRoute(routeId) {
+  async loadArchivedRoute(routeId, beforeApply = () => {}) {
     if (this.deliveries.length > 0) {
       if (!confirm('Você tem paradas ativas na tela. Deseja substituí-las pela rota arquivada ' + routeId + '?')) {
-        return;
+        return false;
       }
     }
     try {
+      if (!/^ROT-[A-Z0-9]{4}$/.test(routeId)) throw new Error('Rota inválida');
       const response = await window.entregasFetch(`api/get_route.php?r=${encodeURIComponent(routeId)}`);
       const data = await response.json();
-      if (data.success && data.route && data.route.stops) {
+      if (response.ok && data.success && data.route?.route_id === routeId && Array.isArray(data.route.stops)) {
+        beforeApply();
+        this.clearShareUrl();
         this.deliveries = data.route.stops;
-        if (!/^ROT-[A-Z0-9]{4}$/.test(routeId)) throw new Error('Rota inválida');
         this.currentRouteId = routeId;
         if (data.route.origin) {
           this.currentOrigin = data.route.origin;
@@ -1488,12 +1505,14 @@ class DeliveryPlanner {
         this.updateMapMarkers();
         this.closeModal('modal-rotinas-history');
         alert(`Rota arquivada ${routeId} carregada com sucesso!`);
+        return true;
       } else {
         alert('Não foi possível carregar os dados desta rota.');
       }
     } catch (e) {
       alert('Erro ao carregar rota arquivada: ' + e.message);
     }
+    return false;
   }
 
   setOrigin(baseId) {

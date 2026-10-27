@@ -196,3 +196,14 @@ class Routines(unittest.TestCase):
             subprocess.run(['node',str(test_api.ROOT/'tests/routines-browser.cjs')],cwd=test_api.ROOT,
                 env=dict(os.environ,TEST_BASE=self.origin),check=True,timeout=120)
         finally:file.write_bytes(original)
+
+
+class HistoryContext(unittest.TestCase):
+    # Separate temporary store: the routine UI scenario starts with an empty list.
+    setUpClass=classmethod(test_api.API.setUpClass.__func__)
+    tearDownClass=classmethod(test_api.API.tearDownClass.__func__)
+
+    @unittest.skipUnless(os.environ.get('ENTREGAS_BROWSER_TEST')=='1','opt-in history Chromium regression')
+    def test_browser_history_context(self):
+        subprocess.run(['node',str(test_api.ROOT/'tests/history-browser.cjs')],cwd=test_api.ROOT,
+            env=dict(os.environ,TEST_BASE=self.origin),check=True,timeout=60)

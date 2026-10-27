@@ -105,7 +105,15 @@
         if(this.current&&(!this.editable()||p.deliveries.some(s=>!located(s)))){alert('Revise as coordenadas e mantenha a rotina em planejamento para otimizar.');return;}
         return original[key]();
       };
-      p.loadArchivedRoute=async id=>{if(!await this.ensureSaved())return;this.current=null;p.storageKey='plaswill_deliveries_v1';await original.loadArchivedRoute(id);this.showPlanning();};
+      p.loadArchivedRoute=async id=>{
+        if(!await this.ensureSaved())return false;
+        const loaded=await original.loadArchivedRoute(id,()=>{
+          this.current=null;this.pendingConflict=null;p.routineId=null;p.storageKey='plaswill_deliveries_v1';
+          this.$('routine-conflict').hidden=true;
+        });
+        if(loaded){this.showPlanning();history.replaceState({},'',location.pathname+'?r='+encodeURIComponent(id));}
+        return loaded;
+      };
       this.legacyExport=original.openExportModal;
     }
     enhanceRows() {
@@ -197,7 +205,13 @@
       exportButton.disabled=onList||!!this.current&&(!this.canWrite||['finished','cancelled'].includes(this.current.status));
       const badge=document.getElementById('badge-rotina-active');
       if(onList){badge.textContent='GESTÃO DE ROTINAS';badge.style.color='var(--pw-text-muted)';}
-      if(!this.current)return;
+      if(!this.current){
+        document.querySelector('.btn-create-delivery').disabled=!this.canWrite||!!this.p.currentRouteId;
+        document.querySelector('[onclick*="optimizeSequence"]').disabled=!this.canWrite||!!this.p.currentRouteId;
+        document.querySelector('[onclick*="openFinishRotinaModal"]').disabled=!this.canWrite||!this.p.currentRouteId;
+        if(!onList){badge.textContent=this.p.currentRouteId?'ROTA ARQUIVADA':'PLANEJAMENTO AVULSO';badge.style.color='var(--pw-text-muted)';}
+        return;
+      }
       const r=this.current;
       this.$('routine-current-name').textContent=r.name;
       const destinations=new Set(this.p.deliveries.map(s=>['logradouro','numero','complemento','bairro','municipio','uf','cep'].map(k=>String(s[k]||'').trim().toLocaleLowerCase('pt-BR').normalize('NFD').replace(/[\u0300-\u036f]/g,'')).join('|'))).size;
