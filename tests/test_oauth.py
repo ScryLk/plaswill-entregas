@@ -162,8 +162,9 @@ class OAuthTests(unittest.TestCase):
         self.assertEqual(self.login('synthetic-reader')[0],303)
         data=self.session();self.assertEqual(data['user']['roles'],['supervisor'])
         self.assertEqual(self.request('/api/get_history.php')[0],200)
+        self.assertEqual(self.request('/api/routine_read.php')[0],200)
         self.assertEqual(self.request('/api/get_route.php?r='+route['route_id'])[0],200)
-        for endpoint in ['save_route','optimize_sequence','process_danfe','revoke_route','issue_route_access','update_route_status','finish_route']:
+        for endpoint in ['save_route','optimize_sequence','process_danfe','revoke_route','issue_route_access','update_route_status','finish_route','routine_write']:
             body={'route_id':route['route_id'],'stop_id':'synthetic-stop','status':'delivered'}
             self.assertEqual(self.request('/api/'+endpoint+'.php',body,data['csrf_token'])[0],403,endpoint)
         for endpoint in ['search_company.php','geocode.php?q=synthetic']:

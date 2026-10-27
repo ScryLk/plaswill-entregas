@@ -46,7 +46,7 @@ class DeliveryPlanner {
     this.currentActiveId = null;
     this.markerMap = {};
 
-    this.init();
+    this.ready = this.init();
   }
 
   async init() {
@@ -56,7 +56,12 @@ class DeliveryPlanner {
       this.bases.plaswill = await response.json();
       this.currentOrigin = this.loadOrigin();
     } catch (_) { alert('Não foi possível carregar a configuração de origem. Atualize a página.'); return; }
-    this.initMap();
+    if (typeof L === 'undefined') {
+      const message = document.createElement('p');
+      message.className = 'routine-map-unavailable';
+      message.textContent = 'Mapa indisponível. Você pode salvar e revisar o planejamento; recarregue a página para tentar carregar o mapa novamente.';
+      document.getElementById('map-container').append(message);
+    } else this.initMap();
     this.bindEvents();
     const hasRouteParam = await this.checkUrlParams();
     if (!hasRouteParam) {
@@ -114,6 +119,7 @@ class DeliveryPlanner {
   }
 
   updateOriginMarker() {
+    if (!this.map || typeof L === 'undefined') return;
     if (this.originMarker) {
       this.map.removeLayer(this.originMarker);
     }
@@ -149,6 +155,7 @@ class DeliveryPlanner {
   }
 
   updateMapMarkers() {
+    if (!this.markersLayer) return;
     this.markersLayer.clearLayers();
     this.markerMap = {};
 
@@ -371,7 +378,7 @@ class DeliveryPlanner {
           <span class="table-nfe-badge">${del.numero_nota ? this.escapeHtml(del.numero_nota) : '—'}</span>
         </td>
         <td>
-          <span>${this.escapeHtml(del.itens_resumo || '1 volume')}</span>
+          <span>${this.escapeHtml(del.itens_resumo || (del.volumes != null ? `${del.volumes} ${del.volumes === 1 ? 'volume' : 'volumes'}` : '1 volume'))}</span>
         </td>
         <td>
           <div class="table-actions-cell">
@@ -1139,6 +1146,13 @@ class DeliveryPlanner {
 
     try {
       let res;
+      if (this.currentShareUrl) {
+        try {
+          const cached = new URL(this.currentShareUrl, window.location.href);
+          const target = new URL('motorista.html', window.location.href);
+          if (!this.currentRouteId || cached.origin !== target.origin || cached.pathname !== target.pathname || cached.searchParams.get('r') !== this.currentRouteId) this.clearShareUrl();
+        } catch (_) { this.clearShareUrl(); }
+      }
       if (this.currentRouteId && this.currentShareUrl) {
         res = {success:true,route_id:this.currentRouteId,share_url:this.currentShareUrl};
       } else if (this.currentRouteId) {
@@ -1160,8 +1174,24 @@ class DeliveryPlanner {
       }
       this.currentRouteId = res.route_id;
       localStorage.setItem('plaswill_active_route_id', this.currentRouteId);
-      const pathBase = window.location.pathname.replace(/\/index\.html$/, '').replace(/\/$/, '');
-      this.currentShareUrl = (res.share_url ? new URL(res.share_url, window.location.href).href : null) || (window.location.origin + pathBase + '/motorista.html?r=' + res.route_id);
+      this.presentShareUrl(res.share_url || ('motorista.html?r=' + res.route_id));
+    } catch (err) {
+      alert('Erro ao gerar link de compartilhamento: ' + err.message);
+    } finally {
+      if (btn) btn.style.opacity = '1';
+    }
+  }
+
+  clearShareUrl() {
+    this.currentShareUrl = null;
+    const input = document.getElementById('export-share-url-input');
+    if (input) input.value = '';
+    document.getElementById('btn-whatsapp-share')?.removeAttribute('href');
+    for (const id of ['export-qrcode-box', 'print-qrcode-canvas']) document.getElementById(id)?.replaceChildren();
+  }
+
+  presentShareUrl(shareUrl) {
+      this.currentShareUrl = new URL(shareUrl, window.location.href).href;
 
       // Preenche o campo de URL
       const urlInput = document.getElementById('export-share-url-input');
@@ -1211,11 +1241,6 @@ class DeliveryPlanner {
       }
 
       this.openModal('modal-export-route');
-    } catch (err) {
-      alert('Erro ao gerar link de compartilhamento: ' + err.message);
-    } finally {
-      if (btn) btn.style.opacity = '1';
-    }
   }
 
   copyShareUrl() {
@@ -1261,7 +1286,7 @@ class DeliveryPlanner {
         <td><b>${this.escapeHtml(del.numero_nota || '-')}</b></td>
         <td><b>${this.escapeHtml(del.destinatario || del.nome_fantasia || '-')}</b></td>
         <td>${this.escapeHtml(del.endereco_completo || del.logradouro || '-')}</td>
-        <td>${this.escapeHtml(del.itens_resumo || '1 volume')}</td>
+        <td>${this.escapeHtml(del.itens_resumo || (del.volumes != null ? `${del.volumes} ${del.volumes === 1 ? 'volume' : 'volumes'}` : '1 volume'))}</td>
         <td style="border-bottom: 1px dotted #94a3b8; height: 32px;"></td>
       `;
       tbody.appendChild(tr);
@@ -1456,18 +1481,20 @@ class DeliveryPlanner {
     }
   }
 
-  async loadArchivedRoute(routeId) {
+  async loadArchivedRoute(routeId, beforeApply = () => {}) {
     if (this.deliveries.length > 0) {
       if (!confirm('Você tem paradas ativas na tela. Deseja substituí-las pela rota arquivada ' + routeId + '?')) {
-        return;
+        return false;
       }
     }
     try {
+      if (!/^ROT-[A-Z0-9]{4}$/.test(routeId)) throw new Error('Rota inválida');
       const response = await window.entregasFetch(`api/get_route.php?r=${encodeURIComponent(routeId)}`);
       const data = await response.json();
-      if (data.success && data.route && data.route.stops) {
+      if (response.ok && data.success && data.route?.route_id === routeId && Array.isArray(data.route.stops)) {
+        beforeApply();
+        this.clearShareUrl();
         this.deliveries = data.route.stops;
-        if (!/^ROT-[A-Z0-9]{4}$/.test(routeId)) throw new Error('Rota inválida');
         this.currentRouteId = routeId;
         if (data.route.origin) {
           this.currentOrigin = data.route.origin;
@@ -1478,12 +1505,14 @@ class DeliveryPlanner {
         this.updateMapMarkers();
         this.closeModal('modal-rotinas-history');
         alert(`Rota arquivada ${routeId} carregada com sucesso!`);
+        return true;
       } else {
         alert('Não foi possível carregar os dados desta rota.');
       }
     } catch (e) {
       alert('Erro ao carregar rota arquivada: ' + e.message);
     }
+    return false;
   }
 
   setOrigin(baseId) {

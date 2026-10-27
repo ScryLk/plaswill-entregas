@@ -23,12 +23,12 @@ class API(unittest.TestCase):
         cls.data.mkdir()
         # Gateway simulation is restricted to this test router, outside the checkout and static root.
         router = Path(cls.tmp.name) / 'router.php'
-        router.write_text("<?php if (($_SERVER['HTTP_X_TEST_IDENTITY']??'')==='operator') { $_SERVER['REMOTE_USER']='synthetic'; $_SERVER['REMOTE_GROUPS']='test-dispatch'; } elseif (($_SERVER['HTTP_X_TEST_IDENTITY']??'')==='denied') { $_SERVER['REMOTE_USER']='synthetic'; $_SERVER['REMOTE_GROUPS']='other'; } return require " + repr(str(ROOT / 'router.php')) + ';')
+        router.write_text("<?php if (($_SERVER['HTTP_X_TEST_IDENTITY']??'')==='operator') { $_SERVER['REMOTE_USER']='synthetic'; $_SERVER['REMOTE_GROUPS']='test-dispatch'; } elseif (($_SERVER['HTTP_X_TEST_IDENTITY']??'')==='reader') { $_SERVER['REMOTE_USER']='synthetic-reader'; $_SERVER['REMOTE_GROUPS']='test-supervise'; } elseif (($_SERVER['HTTP_X_TEST_IDENTITY']??'')==='denied') { $_SERVER['REMOTE_USER']='synthetic'; $_SERVER['REMOTE_GROUPS']='other'; } return require " + repr(str(ROOT / 'router.php')) + ';')
         with socket.socket() as sock:
             sock.bind(('127.0.0.1', 0)); cls.port = sock.getsockname()[1]
         cls.origin = f'http://127.0.0.1:{cls.port}'
-        env = dict(os.environ, ENTREGAS_DATA_DIR=str(cls.data), ENTREGAS_PUBLIC_ORIGIN=cls.origin,
-                   ENTREGAS_ROLE_GROUPS='{"operator":["test-dispatch"]}', PHP_CLI_SERVER_WORKERS='4')
+        env = dict(os.environ, GED_AUTH_TYPE='gateway', GEMINI_API_KEY='', ENTREGAS_DATA_DIR=str(cls.data), ENTREGAS_PUBLIC_ORIGIN=cls.origin,
+                   ENTREGAS_ROLE_GROUPS='{"operator":["test-dispatch"],"supervisor":["test-supervise"]}', PHP_CLI_SERVER_WORKERS='4')
         companies=Path(cls.tmp.name)/'companies.json'
         companies.write_text(json.dumps([{'id':'synthetic-company','nome':'Synthetic Company','fantasia':'Synthetic','logradouro':'Synthetic Street','lat':-28.2,'lon':-53.5}]))
         env['ENTREGAS_COMPANIES_FILE']=str(companies)

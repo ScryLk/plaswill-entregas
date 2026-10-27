@@ -141,3 +141,10 @@ Não implantar sem revisar [segurança](docs/SECURITY_REVIEW.md) e [plano de imp
 [Arquitetura e fluxos](docs/ARCHITECTURE.md) · [Contratos HTTP](docs/API_CONTRACTS.md) · [Testes](docs/TEST_PLAN.md) · [Implementações e pendências](docs/IMPLEMENTATION_PLAN.md).
 
 O botão **Entrar pelo GED** inicia o OAuth2 quando configurado. Nenhuma senha corporativa é capturada. Supervisão é somente leitura; Diretoria/admin têm privilégios cumulativos. Configuração em api/.env.example, com segredo vazio para preenchimento seguro pelo administrador.
+
+
+## Gestão de Rotinas de Entregas
+
+O painel agora começa em **Rotinas de Entregas**: crie rascunhos no servidor, selecione vários clientes entre pesquisas/páginas, confira endereços e retome o planejamento em outro computador. Planejamento reutiliza mapa, inclusão manual/DANFE, edição, ordenação e otimização. O despacho confirmado associa uma única rota e o link seguro do motorista; progresso, encerramento e cancelamento preservam os dados.
+
+[Fluxo, estados, APIs e validação do módulo](docs/ROUTINES.md). Rotas legadas continuam no Histórico. A camada PHP-FPM/web server precisa permitir os dois novos endpoints públicos e bloquear os módulos privados/data/routines conforme a documentação; não há deploy automático.

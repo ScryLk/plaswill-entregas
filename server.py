@@ -62,7 +62,7 @@ class DeliveryHandler(http.server.SimpleHTTPRequestHandler):
         if path.startswith('/api/'):
             self.proxy_api(); return
         allowed = {'/', '/index.html', '/motorista.html', '/app.js', '/motorista.js', '/outbox.js',
-                   '/session.js', '/origin.json', '/driver.webmanifest', '/style.css', '/motorista.css', '/sw.js', '/manifest.json', '/qrcode.min.js'}
+                   '/routines.js', '/routines.css', '/session.js', '/origin.json', '/driver.webmanifest', '/style.css', '/motorista.css', '/sw.js', '/manifest.json', '/qrcode.min.js'}
         import re
         if path not in allowed and not re.fullmatch(r'/(img|icons)/[A-Za-z0-9_.-]+', path):
             self.send_error(404); return

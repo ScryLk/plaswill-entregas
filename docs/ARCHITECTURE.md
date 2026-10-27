@@ -33,3 +33,8 @@ Service Worker armazena apenas shell do motorista e recursos locais listados. Na
 ## JSON versus SQLite
 
 JSON preserva portabilidade e backup simples, mas lock global serializa writers, histórico escaneia rotas e recibos crescem. SQLite WAL oferece transações multi-recurso, índices e melhores leituras concorrentes, exigindo importação validada, backup consistente de WAL e plano de restauração. Não migrado. Medir latência/volume antes de decidir; migração futura precisa importar IDs e recibos, conferir contagens/hashes e ensaiar rollback dos dados.
+
+
+## Rotinas persistentes
+
+A gestão separa RUT-<128 bits> (planejamento) de ROT-XXXX (execução/capacidade). Snapshots JSON em data/routines reutilizam storeLock/atomicDocument, com versão otimista e recibos. Despacho/cancelamento recuperam gravações interrompidas usando a rota autoritativa associada; não há migração de banco ou conversão de legado. routines.js conecta o novo catálogo/listagem ao planner existente. Modelo e transições em [ROUTINES.md](ROUTINES.md).

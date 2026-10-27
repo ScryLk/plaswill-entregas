@@ -18,7 +18,7 @@ set_exception_handler(function (Throwable $e): void {
     jsonResponse(['error'=>'Falha interna ao processar a solicitação.'],500);
 });
 $endpoint=basename($_SERVER['SCRIPT_NAME']??'');
-$readOnly=in_array($endpoint,['get_route.php','get_history.php','search_company.php','geocode.php','auth_login.php','auth_callback.php','auth_session.php'],true);
+$readOnly=in_array($endpoint,['get_route.php','get_history.php','search_company.php','geocode.php','auth_login.php','auth_callback.php','auth_session.php','routine_read.php'],true);
 if (($_SERVER['REQUEST_METHOD']??'GET')!==($readOnly?'GET':'POST')) {
     header('Allow: '.($readOnly?'GET':'POST')); jsonResponse(['error'=>'Método não permitido.'],405);
 }

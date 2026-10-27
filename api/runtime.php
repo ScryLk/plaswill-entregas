@@ -38,6 +38,10 @@ function validateStops(mixed $stops): array {
         coordinates($s);
         if (!in_array($s['status']??'pending',['pending','delivered'],true)) invalid('Status inválido.');
         foreach ($s as $k=>$v) {
+            if ($k==='volumes') {
+                if (!is_int($v)||$v<0||$v>100000) invalid('Quantidade de volumes inválida.');
+                continue;
+            }
             if (in_array($k,['lat','lon','version'],true)) continue;
             textField($v,2000);
         }
@@ -82,7 +86,9 @@ function loadRoute(string $id): array {
     if (($r['route_id']??null)!==$id || !isset($r['stops']) || !is_array($r['stops'])) throw new RuntimeException('storage');
     return $r;
 }
-function publicRoute(array $r): array { unset($r['_driver'],$r['_operations'],$r['_create_operation']); return $r; }
+function publicRoute(array $r): array {
+    return array_filter($r,fn($key)=>!str_starts_with((string)$key,'_'),ARRAY_FILTER_USE_KEY);
+}
 function operatorAllowed(): bool {
     return requestPrincipal() !== null;
 }
@@ -101,7 +107,7 @@ function newCode(): string {
     for ($i=0;$i<4;$i++) $id.=$chars[random_int(0,strlen($chars)-1)];
     return $id;
 }
-function createRoute(array $body, ?callable $generator=null): array {
+function createRoute(array $body, ?callable $generator=null, ?string $routineRef=null, ?string $dispatchActor=null): array {
     $stops=validateStops($body['stops']??null);
     foreach ($stops as &$stop) $stop['version']=0;
     unset($stop);
@@ -117,6 +123,7 @@ function createRoute(array $body, ?callable $generator=null): array {
             'veiculo'=>textField($body['veiculo']??'Furgão / Utilitário'), 'origin'=>$origin,
             'total_stops'=>count($stops),'stops'=>$stops,'version'=>0,
             '_driver'=>['hash'=>hash('sha256',$token),'expires_at'=>time()+7*86400,'revoked'=>false]];
+        if ($routineRef!==null) { $r['routine_id']=$routineRef;$r['_dispatch_actor']=$dispatchActor; }
         atomicDocument(routePath($id),$r);
         return [$r,$token];
     }

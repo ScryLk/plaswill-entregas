@@ -24,3 +24,8 @@ Mudança de contrato: rotina ainda não despachada é salva antes de encerrada, 
 GET auth_login.php redireciona ao authorize configurado; GET auth_callback.php consome state/código e redireciona somente à origem fixa. GET auth_session.php informa authenticated, login_available, mode, user (id/roles) e csrf_token apenas da própria sessão. Durante falha do GED, pode retornar 503 com logout_available e nonce para encerrar a sessão local, sem retornar identidade ou permitir leitura/escrita. POST auth_logout.php exige Origin e X-CSRF-Token, destrói a sessão local e retorna success. Não há endpoint de logout global do GED. Ver AUTHENTICATION.md.
 
 Com cookie OAuth, todos os POST corporativos exigem X-CSRF-Token. Os papéis são revalidados por OCS: supervisão só acessa get_route/get_history, expedição/admin acessam as operações existentes. Capacidade Bearer permanece restrita à própria rota e não substitui autorização corporativa em catálogo, IA ou histórico. Novos auth.php/settings.php são módulos privados, não endpoints.
+
+
+## Rotinas e catálogo paginado
+
+`routine_read.php` (GET: lista, detalhe e progresso), `routine_write.php` (POST: create/update/dispatch/cancel) e `search_company.php?mode=catalog` reutilizam a autorização atual. Supervisão só lê rotinas; motorista não recebe acesso corporativo pelo token. Contratos completos, expected_version/operation_id, filtros e respostas de replay estão em [ROUTINES.md](ROUTINES.md). `pending`/`delivered` são preservados; cancelamento de rotina revoga capacidade e impede novas alterações/finalização da rota cancelada.
