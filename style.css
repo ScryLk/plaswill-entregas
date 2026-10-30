@@ -2062,7 +2062,7 @@ body {
     overflow: visible !important;
   }
 
-  .app-header,
+  .app-header, .app-header-plaswill,
   .main-content,
   .modal-overlay,
   .action-dock,
@@ -2071,7 +2071,7 @@ body {
     display: none !important;
   }
 
-  .print-romaneio-sheet {
+  body.document-print-ready .print-romaneio-sheet {
     display: block !important;
     padding: 15mm 10mm;
     background: #ffffff;
@@ -2086,6 +2086,11 @@ body {
   .print-footer {
     display: block !important;
   }
+
+  .routine-nav, #routines-view, #routine-plan-bar, dialog, .document-actions { display: none !important; }
+  #print-document-notice { font-weight: 800; font-size: 11px; margin-top: 8px; }
+  .print-qr-area[hidden] { display: none !important; }
+  body:not(.document-print-ready)::before { content: "Gere o documento pelos botões Imprimir romaneio ou Exportar relatório."; display: block; color: #000; padding: 20px; }
 
   .print-header {
     display: flex;
@@ -2271,3 +2276,6 @@ body {
 /* Session controls preserve the existing header style. */
 #corporate-session-status { font-size: .75rem; max-width: 14rem; color: var(--pw-text-dim, #94a3b8); }
 #corporate-login[hidden], #corporate-logout[hidden] { display: none; }
+
+.document-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--border-subtle); }
+.document-actions p { flex-basis: 100%; margin: 0; font-size: 12px; color: var(--pw-text-muted); }
