@@ -1,5 +1,7 @@
 # Plaswill Entregas 🚚
 
+Auditoria e estabilização de 30/10/2026: [inconsistências](docs/AUDITORIA_INCONSISTENCIAS.md), [matriz de regressão](docs/MATRIZ_REGRESSAO.md), [persistência e recuperação](docs/PERSISTENCIA_E_RECUPERACAO.md) e [homologação/rollback](docs/PLANO_HOMOLOGACAO.md). Não há seed no fluxo operacional. Romaneio/relatório consultam dados confirmados no servidor; cópia de recuperação local é uma ação distinta. A validação local não autoriza produção.
+
 > **Plataforma Web & PWA de Roteirização, Despacho e Gestão de Entregas de Última Milha**  
 > *Plaswill Indústria de Termoplásticos & Lótus Descartáveis — Panambi, RS*
 

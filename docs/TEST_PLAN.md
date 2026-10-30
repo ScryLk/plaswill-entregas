@@ -1,5 +1,9 @@
 # Testes e evidências
 
+## Auditoria de estabilização — 30/10/2026
+
+Resultado atual: **50 testes de integração aprovados sem skips, 17 testes Node e 45 verificações de sintaxe/consistência aprovados**. Executados com `TEST_LEAFLET_DIR=/workspace/.tools ENTREGAS_BROWSER_TEST=1 ENTREGAS_PHP_BIN=/workspace/.tools/bin/php python3 -m unittest discover -s tests -v` e `node --test tests/*.test.js`. Escopo, evidências antes/depois e limitações estão em [AUDITORIA_INCONSISTENCIAS.md](AUDITORIA_INCONSISTENCIAS.md), [MATRIZ_REGRESSAO.md](MATRIZ_REGRESSAO.md) e [PLANO_HOMOLOGACAO.md](PLANO_HOMOLOGACAO.md). As contagens históricas abaixo descrevem execuções anteriores, não substituem esta evidência. Nenhuma execução usou a VPS ou dados corporativos.
+
 Requer PHP 8.2+ (curl para integração IA), Python e Node. Nenhum teste usa cadastro real, credenciais ou VPS. Gateway simulado existe somente em router temporário dos testes; operações usam diretório temporário. Sem pip/npm install para suites de backend/outbox.
 
 ```sh

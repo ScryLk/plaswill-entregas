@@ -1,5 +1,7 @@
 # Revisão de segurança
 
+Atualização de 30/10/2026: auditoria e estabilização em [AUDITORIA_INCONSISTENCIAS.md](AUDITORIA_INCONSISTENCIAS.md). O novo helper privado `api/danfe_delivery.php` precisa de deny rule no servidor real. A aplicação não gera seeds; DANFE é sugestão revisável, sem jitter; documentos não incorporam credenciais do motorista. PWA usa writer exclusivo por rota com Web Locks, falhando em modo somente leitura sem suporte. Revisão de catálogo versionado, política de dispositivos compartilhados, auditoria central e rate limits permanecem pendentes. Nenhuma validação local equivale a autorização de produção.
+
 ## Dados e exposição
 
 Catálogo: 1.604 registros com razão social, fantasia, CNPJ, telefone, endereço, coordenadas e código interno. Nomes/telefones/endereços podem identificar pessoas; código SGE e vínculo comercial são informação corporativa. Necessários à seleção e entrega, mas não ao download público em massa. Nenhum registro real foi usado nos testes. Recomenda-se tornar o repositório privado e revisar histórico Git, forks e cópias; não houve alteração de visibilidade nem reescrita do histórico.
