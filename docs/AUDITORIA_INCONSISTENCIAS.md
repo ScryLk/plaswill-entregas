@@ -48,6 +48,8 @@ O remoto main foi conferido via Git. Consulta HTTP ao domínio e chamadas da API
 | ENT-029 | Histórico atrasado substitui rotina recém-aberta | P1 | Resolvido |
 | ENT-030 | Rota avulsa presume motorista e veículo | P1 | Resolvido |
 | ENT-031 | Falha de endereço substituída por centro municipal deslocado | P0 | Resolvido |
+| ENT-032 | Produção serve versão anterior às correções (paridade de deploy) | P0 | Confirmado |
+| ENT-033 | Query de cache dos assets não muda com o conteúdo | P1 | Em correção |
 
 “Resolvido” significa causa confirmada e correção validada em isolamento. Não equivale a produção homologada. “Não reproduzido” não descarta o sintoma observado pelo usuário. Itens dependentes da VPS permanecem bloqueados por dependência externa.
 
@@ -494,3 +496,32 @@ Não excluir por nome, coordenada ou aparência. Em ambiente autorizado, inventa
 - `tests/test_persistence_audit.py`
 - `tests/test_pwa.py`
 - `tests/test_reports.py`
+
+
+## Verificação de paridade com produção (26/10/2026)
+
+Método: leitura do conteúdo efetivamente servido por `https://entregas.plaswill.tech` via HTTP público (sem credenciais), comparado à `main` (HEAD `aded349`).
+
+### ENT-032 — Produção serve versão anterior às correções
+
+- **Módulo / arquivo:** deploy / `app.js`, `motorista.html` publicados.
+- **Prioridade / impacto:** P0 — todos os sintomas funcionais relatados (entregas demonstrativas, `ROT-0001`, romaneio de outra rotina) existem apenas na versão servida.
+- **Sintoma observado:** operadores relatam dados inventados e documentos incorretos apesar das correções estarem na `main`.
+- **Evidência:** `app.js` servido contém `checkFirstRunSeed` (2×) e `ROT-0001` (1×); a `main` contém zero ocorrências (remoção em `811f76a`). Tamanho servido 65,4 KB vs 79,1 KB na `main`. `motorista.html` servido referencia `outbox.js?v=1` e `motorista.js?v=4`; a `main` usa `?v=2` e `?v=5`.
+- **Resultado esperado:** produção servindo o mesmo commit validado da `main`.
+- **Resultado encontrado:** produção em commit anterior ao PR #3.
+- **Causa-raiz:** deploy defasado; nunca foi publicada a versão corrigida.
+- **Classificação / situação:** Confirmado / Bloqueado por dependência externa (deploy com aprovação).
+- **Estratégia:** publicar a `main` com o bump de cache desta branch e validar com `scripts/verify-deploy.sh`.
+- **Teste de regressão:** hash de cada asset servido igual ao do checkout; guarda `tests/test_no_demo_markers.py` impede o retorno dos seeds.
+
+### ENT-033 — Query de cache não muda com o conteúdo dos assets
+
+- **Módulo / arquivo:** `index.html`, `motorista.html`, `sw.js`.
+- **Prioridade / impacto:** P1 — deploy da `main` sem bump de versão mantém operadores no `app.js` antigo; risco de "meia atualização" com API nova e front antigo.
+- **Sintoma observado:** correções "não chegam" mesmo após publicar.
+- **Evidência:** `index.html` da produção e da `main` referenciam `app.js?v=11` para conteúdos diferentes; `style.css?v=8`, `session.js?v=1` e `routines.js?v=1` também não foram renovados desde a versão antiga.
+- **Causa-raiz:** versão de cache tratada como rótulo manual e não como parte do deploy.
+- **Classificação / situação:** Em correção / Corrigido na branch `fix/paridade-deploy-cache`, aguardando homologação.
+- **Estratégia:** bump de `?v=` nos assets alterados, `CACHE` do service worker renovado, regra documentada no `DEPLOY.md` e verificação automatizada `scripts/verify-deploy.sh`.
+- **Teste de regressão:** `tests/test_no_demo_markers.py` exige `?v=` em todo asset local e igualdade entre `sw.js` e `motorista.html`; `verify-deploy` acusa divergência servida vs checkout.
