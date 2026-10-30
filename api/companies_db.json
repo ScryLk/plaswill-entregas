@@ -25527,9 +25527,10 @@
     "uf": "RS",
     "cnpj": "17183309000167",
     "telefone": "(55) 55 9680-0102",
-    "lat": null,
-    "lon": null,
-    "tipo": "cliente"
+    "lat": -28.363562,
+    "lon": -53.767558,
+    "tipo": "cliente",
+    "geocoded_by": "nominatim_verified"
   },
   {
     "id": "sge_1350",

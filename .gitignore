@@ -1,6 +1,7 @@
 # Variáveis de ambiente e segredos
 .env
 api/.env
+.oauth_client.json
 
 # Sistema Operacional
 .DS_Store

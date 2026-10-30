@@ -834,7 +834,8 @@ class DeliveryPlanner {
     const isGeneric = !this.validDeliveryCoordinates({lat,lon});
 
     if (isGeneric) {
-      const fullStreet = `${logradouro}${numero ? ', ' + numero : ''}`;
+      const cleanNum = (numero && !/^(s\/?n[º°]?|sem\s*n[uú]mero|0)$/i.test(numero.trim())) ? numero.trim() : '';
+      const fullStreet = `${logradouro}${cleanNum ? ', ' + cleanNum : ''}`;
       try {
         const geoRes = await window.entregasFetch(`api/geocode.php?q=${encodeURIComponent(fullStreet)}&cidade=${encodeURIComponent(cidade)}&uf=${encodeURIComponent(uf)}`);
         const geoData = await geoRes.json();
@@ -988,6 +989,7 @@ class DeliveryPlanner {
     // Selecting a source record creates a delivery snapshot only after operator review.
     this.fillManualFormWithCompany(comp);
     this.openModal('modal-create-delivery');this.switchCreateTab('manual');
+
   }
 
   // =========================================================================
