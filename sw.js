@@ -1,5 +1,5 @@
-const CACHE = 'plaswill-driver-v3';
-const ASSETS = ['./motorista.html','./motorista.js?v=5','./outbox.js?v=2','./motorista.css?v=2','./driver.webmanifest','./img/plaswill_logo.png','./img/icon-192.png','./img/icon-512.png'];
+const CACHE = 'plaswill-driver-v4';
+const ASSETS = ['./motorista.html','./motorista.js?v=5','./outbox.js?v=2','./motorista.css?v=3','./driver.webmanifest','./img/plaswill_logo.png','./img/icon-192.png','./img/icon-512.png'];
 self.addEventListener('install', event => event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(ASSETS))));
 // No skipWaiting: an update activates after existing pages close. localStorage outbox survives.
 self.addEventListener('activate', event => event.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k.startsWith('plaswill-driver-') && k !== CACHE).map(k => caches.delete(k))))));
