@@ -45,7 +45,7 @@ const assert = require('node:assert/strict');
   await page.evaluate(()=>driverApp.finishCurrentRoute());
   assert.equal(await page.evaluate(()=>driverApp.outbox.items.length),1);
   // CacheStorage must hold static resources only.
-  const keys=await page.evaluate(async()=>{const c=await caches.open('plaswill-driver-v2');return (await c.keys()).map(r=>r.url);});
+  const keys=await page.evaluate(async()=>{const c=await caches.open('plaswill-driver-v3');return (await c.keys()).map(r=>r.url);});
   assert(keys.length>0);
   assert(keys.every(k=>!k.includes('/api/')&&!k.includes('token=')));
   assert.deepEqual(errors,[]);
@@ -80,7 +80,7 @@ const assert = require('node:assert/strict');
     assert(await p.locator('a[href*="api.whatsapp.com"]').count()>0);
     assert(await p.locator('#export-qrcode-box canvas').count()>0);
     assert(await p.locator('a[href*="waze.com/ul"]').count()>0);
-    await p.evaluate(()=>{window.print=()=>{window.printInvoked=true;};planner.printRomaneio();});
+    await p.evaluate(async()=>{window.print=()=>{window.printInvoked=true;};await planner.printRomaneio();});
     assert.equal(await p.evaluate(()=>window.printInvoked),true);
     await p.evaluate(()=>planner.confirmFinishRotina());
     assert.equal(await p.evaluate(()=>planner.deliveries.length),0);

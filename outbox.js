@@ -3,8 +3,24 @@ class DeliveryOutbox {
   constructor(storage, routeId, send) {
     this.storage = storage; this.routeId = routeId; this.send = send;
     this.key = 'plaswill_outbox_v1_' + routeId;
-    this.items = JSON.parse(storage.getItem(this.key) || '[]');
+    this.reload();
     this.running = false; this.retryAt = 0; this.attempts = 0;
+  }
+  reload() {
+    const raw = this.storage.getItem(this.key);
+    const items = JSON.parse(raw === null ? '[]' : raw);
+    const operations = new Set();
+    if (!Array.isArray(items)) throw new Error('Fila local inválida. Preserve os dados para revisão da expedição.');
+    for (const e of items) {
+      if (!e || e.route_id !== this.routeId ||
+      typeof e.operation_id !== 'string' || !/^[A-Za-z0-9_-]{16,100}$/.test(e.operation_id) ||
+      operations.has(e.operation_id) ||
+      typeof e.stop_id !== 'string' || !['pending','delivered'].includes(e.status) ||
+      !['pending','delivered'].includes(e.previous_status) || !['pending','conflict','unauthorized'].includes(e.state) ||
+      !Number.isInteger(e.expected_version) || e.expected_version < 0) throw new Error('Fila local inválida. Preserve os dados para revisão da expedição.');
+      operations.add(e.operation_id);
+    }
+    this.items = items;
   }
   persist() { this.storage.setItem(this.key, JSON.stringify(this.items)); }
   enqueue(stop, status) {
@@ -36,7 +52,8 @@ class DeliveryOutbox {
           e.state = response.status === 409 ? 'conflict' : [401, 403].includes(response.status) ? 'unauthorized' : 'pending';
           this.persist(); throw new Error('sync');
         }
-        if (!data.success || data.operation_id !== e.operation_id || data.route_id !== this.routeId || data.stop_id !== e.stop_id || data.status !== e.status || !Number.isInteger(data.version)) throw new Error('ack');
+        const expected = e.expected_version + (e.status !== e.previous_status ? 1 : 0);
+        if (!data.success || data.operation_id !== e.operation_id || data.route_id !== this.routeId || data.stop_id !== e.stop_id || data.status !== e.status || !Number.isInteger(data.version) || data.version !== expected) throw new Error('ack');
         this.items.shift();
         try { this.persist(); } catch (err) { this.items.unshift(e); throw err; }
         this.attempts = 0; this.retryAt = 0;
