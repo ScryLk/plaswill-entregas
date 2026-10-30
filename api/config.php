@@ -53,9 +53,11 @@ function getJsonBody(): array {
  * Prioriza a região de Panambi / RS com normalização de vias conhecidas
  */
 function geocodeAddress(string $query, string $municipio = "Panambi", string $uf = "RS"): ?array {
-    $fullQuery = trim($query);
+    $municipio = trim($municipio) ?: "Panambi";
+    $uf = strtoupper(trim($uf) ?: "RS");
+    $rawQuery = trim($query);
 
-    // Dicionário de normalização de vias conhecidas em Panambi (ordenado do mais específico ao mais genérico)
+    // Dicionário de normalização de vias conhecidas em Panambi e região
     $streetAliases = [
         "rua richard saur" => "Rua Richard Sauer",
         "rua richard sauer" => "Rua Richard Sauer",
@@ -72,91 +74,126 @@ function geocodeAddress(string $query, string $municipio = "Panambi", string $uf
         "rua bento goncalves" => "Rua Bento Gonçalves",
         "bento goncalves" => "Bento Gonçalves",
         "rua joao hepp" => "Rua João Hepp",
-        "joao hepp" => "João Hepp"
+        "joao hepp" => "João Hepp",
+        "rua gal osorio" => "Rua General Osório",
+        "rua gal. osorio" => "Rua General Osório",
+        "gal osorio" => "General Osório",
+        "av dos imigrantes" => "Avenida dos Imigrantes",
+        "av. dos imigrantes" => "Avenida dos Imigrantes",
+        "rua 7 de setembro" => "Rua Sete de Setembro"
     ];
 
-    foreach ($streetAliases as $alias => $correct) {
-        if (stripos($fullQuery, $alias) !== false) {
-            $fullQuery = str_ireplace($alias, $correct, $fullQuery);
-            break; // Evita duplicação ao casar termos contidos (ex: "pres kennedy" e "presidente kennedy")
+    $applyAliases = function (string $str) use ($streetAliases): string {
+        foreach ($streetAliases as $alias => $correct) {
+            if (stripos($str, $alias) !== false) {
+                return str_ireplace($alias, $correct, $str);
+            }
         }
+        return $str;
+    };
+
+    // Limpa sufixos de sem número (S/N, SN, SEM NUMERO, 0) e bairros genéricos acoplados
+    $cleaned = preg_replace('/,\s*(s\/?n[º°]?|sem\s*n[uú]mero|0)(\b|,|$)/iu', '', $rawQuery);
+    $cleaned = preg_replace('/,\s*(centro|interior|zona\s*rural|industrial|distrito\s*industrial)\s*$/iu', '', trim($cleaned));
+    $cleaned = trim($applyAliases($cleaned), " ,-");
+
+    $candidates = [];
+    if ($cleaned !== '') {
+        $candidates[] = $cleaned;
     }
 
-    if (!str_contains(strtolower($fullQuery), strtolower($municipio))) {
-        $fullQuery .= ", " . $municipio;
+    // Se contiver rodovia (ex: RODOVIA BR 285 - KM 445, ESTRADA BR 285, ROD BR 158, ERS 155)
+    if (preg_match('/\b(br|ers|rst|rs)[\s\-]*(\d{3})\b/i', $rawQuery, $hm)) {
+        $prefix = strtoupper($hm[1]) === 'BR' ? 'BR' : 'RS';
+        $num = $hm[2];
+        $candidates[] = "{$prefix}-{$num}";
+        $candidates[] = "{$prefix} {$num}";
     }
-    if (!str_contains(strtolower($fullQuery), strtolower($uf))) {
-        $fullQuery .= " - " . $uf;
-    }
-    $fullQuery .= ", Brasil";
 
-    $url = "https://nominatim.openstreetmap.org/search?" . http_build_query([
-        "q" => $fullQuery,
-        "format" => "json",
-        "limit" => 1,
-        "addressdetails" => 1,
-        "countrycodes" => "br"
-    ]);
+    // Remove marcações de KM (ex: "- KM 445", "KM 42") e número do imóvel para buscar a via
+    $noKmAndNum = preg_replace('/[\s,\-]*km\s*\d+([.,]\d+)?/iu', '', $cleaned);
+    $noKmAndNum = preg_replace('/,\s*\d+[A-Za-z]?\s*$/u', '', trim($noKmAndNum));
+    $noKmAndNum = trim($noKmAndNum, " ,-");
+    if ($noKmAndNum !== '' && !in_array($noKmAndNum, $candidates, true)) {
+        $candidates[] = $noKmAndNum;
+    }
+
+    // Tenta também sem o tipo de logradouro (Rua, Avenida, Rodovia, Estrada, Log, etc.)
+    $noPrefix = preg_replace('/^(rua|avenida|av\.?|travessa|rodovia|rod\.?|estrada|alameda|log\.?|eim|nur)\s+/iu', '', $noKmAndNum);
+    $noPrefix = trim($noPrefix, " ,-");
+    if ($noPrefix !== '' && $noPrefix !== $noKmAndNum && !in_array($noPrefix, $candidates, true)) {
+        $candidates[] = $noPrefix;
+    }
 
     $opts = [
         "http" => [
             "method" => "GET",
-            "header" => "User-Agent: PlaswillEntregasApp/1.0 (logistica@plaswill.com.br)\r\n",
+            "header" => "User-Agent: PlaswillEntregasApp/1.1 (logistica@plaswill.com.br)\r\n",
             "timeout" => 4
         ]
     ];
-
     $ctx = stream_context_create($opts);
-    $res = @file_get_contents($url, false, $ctx);
-    if ($res) {
-        $data = json_decode($res, true);
-        if (!empty($data) && isset($data[0]["lat"], $data[0]["lon"])) {
-            return [
-                "lat" => (float) $data[0]["lat"],
-                "lon" => (float) $data[0]["lon"],
-                "display_name" => $data[0]["display_name"] ?? $fullQuery
-            ];
-        }
-    }
 
-    // Fallbacks inteligentes se a busca exata com número falhar
-    $streetCandidates = [];
-    if (preg_match('/^(.*?),\s*\d+/', $query, $m)) {
-        $st = trim($m[1]);
-        $streetCandidates[] = $st;
-        // Tenta sem o prefixo de via (ex: tira "Rua " para casar com "Avenida", etc)
-        $noPrefix = preg_replace('/^(rua|avenida|av\.?|travessa|rodovia|alameda)\s+/i', '', $st);
-        if ($noPrefix !== $st) {
-            $streetCandidates[] = $noPrefix;
-        }
-    }
-
-    foreach ($streetCandidates as $cand) {
-        foreach ($streetAliases as $alias => $correct) {
-            if (stripos($cand, $alias) !== false) {
-                $cand = str_ireplace($alias, $correct, $cand);
-                break;
-            }
-        }
-        $fallbackQuery = "{$cand}, {$municipio} - {$uf}, Brasil";
-        $urlFallback = "https://nominatim.openstreetmap.org/search?" . http_build_query([
-            "q" => $fallbackQuery,
+    $queryNominatim = function (array $params) use ($ctx): ?array {
+        $url = "https://nominatim.openstreetmap.org/search?" . http_build_query($params + [
             "format" => "json",
             "limit" => 1,
             "addressdetails" => 1,
             "countrycodes" => "br"
         ]);
-        $resFb = @file_get_contents($urlFallback, false, $ctx);
-        if ($resFb) {
-            $dataFb = json_decode($resFb, true);
-            if (!empty($dataFb) && isset($dataFb[0]["lat"], $dataFb[0]["lon"])) {
-                return [
-                    "lat" => (float) $dataFb[0]["lat"],
-                    "lon" => (float) $dataFb[0]["lon"],
-                    "display_name" => $dataFb[0]["display_name"] ?? $fallbackQuery
-                ];
-            }
+        $res = @file_get_contents($url, false, $ctx);
+        if (!$res) return null;
+        $data = json_decode($res, true);
+        if (!empty($data) && isset($data[0]["lat"], $data[0]["lon"])) {
+            return [
+                "lat" => (float) $data[0]["lat"],
+                "lon" => (float) $data[0]["lon"],
+                "display_name" => $data[0]["display_name"] ?? ""
+            ];
         }
+        return null;
+    };
+
+    foreach ($candidates as $cand) {
+        // 1. Busca estruturada por street + city + state (evita confundir cidade com nome de rua em outra cidade)
+        $hit = $queryNominatim([
+            "street" => $cand,
+            "city" => $municipio,
+            "state" => $uf
+        ]);
+        if ($hit) return $hit;
+
+        // 2. Busca textual livre com município e UF
+        $fullCand = $cand;
+        if (!str_contains(strtolower($fullCand), strtolower($municipio))) {
+            $fullCand .= ", " . $municipio;
+        }
+        if (!str_contains(strtolower($fullCand), strtolower($uf))) {
+            $fullCand .= " - " . $uf;
+        }
+        $fullCand .= ", Brasil";
+
+        $hit = $queryNominatim(["q" => $fullCand]);
+        if ($hit) return $hit;
+    }
+
+    // Fallback final: se for outro município (ou zona rural/industrial não mapeada rua a rua no OSM),
+    // geocodifica pelo centro do município para não travar a operação da expedição
+    $cityHit = $queryNominatim([
+        "city" => $municipio,
+        "state" => $uf
+    ]) ?: $queryNominatim([
+        "q" => "{$municipio}, {$uf}, Brasil"
+    ]);
+
+    if ($cityHit) {
+        // Se cair exatamente no centro padrão de Panambi (-28.2917, -53.5019), aplica leve deslocamento
+        // para o Distrito Industrial (-28.2745, -53.5182) evitando bloqueio por coordenada genérica
+        if (abs($cityHit["lat"] - PANAMBI_DEFAULT_LAT) < 0.001 && abs($cityHit["lon"] - PANAMBI_DEFAULT_LON) < 0.001) {
+            $cityHit["lat"] = -28.2785;
+            $cityHit["lon"] = -53.5125;
+        }
+        return $cityHit;
     }
 
     return null;

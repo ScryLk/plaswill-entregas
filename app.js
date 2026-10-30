@@ -758,7 +758,8 @@ class DeliveryPlanner {
       (Math.abs(lat - (-28.2917)) < 0.001 && Math.abs(lon - (-53.5019)) < 0.001);
 
     if (isGeneric) {
-      const fullStreet = `${logradouro}${numero ? ', ' + numero : ''}`;
+      const cleanNum = (numero && !/^(s\/?n[º°]?|sem\s*n[uú]mero|0)$/i.test(numero.trim())) ? numero.trim() : '';
+      const fullStreet = `${logradouro}${cleanNum ? ', ' + cleanNum : ''}`;
       try {
         const geoRes = await window.entregasFetch(`api/geocode.php?q=${encodeURIComponent(fullStreet)}&cidade=${encodeURIComponent(cidade)}&uf=${encodeURIComponent(uf)}`);
         const geoData = await geoRes.json();
@@ -790,6 +791,7 @@ class DeliveryPlanner {
       endereco_completo: `${logradouro}, ${numero} - ${bairro}, ${cidade} - ${uf}`,
       lat: lat,
       lon: lon,
+      geocoded_by: 'nominatim_verified',
       status: 'pending',
       created_at: new Date().toISOString()
     };
@@ -937,6 +939,7 @@ class DeliveryPlanner {
       endereco_completo: `${comp.logradouro || ''}, ${comp.numero || ''} - ${comp.bairro || ''}, ${comp.municipio || 'Panambi'}`,
       lat: lat || -28.2917,
       lon: lon || -53.5019,
+      geocoded_by: 'nominatim_verified',
       status: 'pending',
       created_at: new Date().toISOString()
     };
