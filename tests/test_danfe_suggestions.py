@@ -72,4 +72,3 @@ class DanfeSuggestions(unittest.TestCase):
         self.assertEqual(result['data']['delivery']['lat'],-28.2)
         self.assertEqual(result['data']['delivery']['geocoded_by'],'local_db')
         self.assertTrue(result['data']['delivery']['needs_review'])
-
