@@ -11,6 +11,21 @@
     return !(Math.abs(Number(s.lat)+28.2917)<.0001&&Math.abs(Number(s.lon)+53.5019)<.0001) || s.geocoded_by==='manual_verified';
   }
   const shortDate=value=>new Date(value+'T12:00:00').toLocaleDateString('pt-BR');
+  function confirmedRoutine(value,expectedId) {
+    const valid=value&&/^RUT-[a-f0-9]{32}$/.test(value.routine_id)&&(!expectedId||value.routine_id===expectedId)&&Number.isSafeInteger(value.version)&&value.version>=0&&
+      Object.hasOwn(names,value.status)&&typeof value.editable==='boolean'&&Array.isArray(value.stops)&&value.stops.length<=500&&
+      value.stops.every(s=>s&&typeof s.id==='string'&&['pending','delivered'].includes(s.status))&&
+      value.origin&&Number.isFinite(Number(value.origin.lat))&&Number.isFinite(Number(value.origin.lon))&&
+      ['name','scheduled_date','motorista','veiculo','notes'].every(key=>typeof value[key]==='string')&&
+      (value.route_id===null||/^ROT-[A-Z0-9]{4}$/.test(value.route_id));
+    if(!valid)throw new Error('O servidor não confirmou os dados da rotina. Suas alterações locais foram preservadas.');
+    return value;
+  }
+  function confirmedShareUrl(value,routeId) {
+    const url=new URL(value,location.href),target=new URL('motorista.html',location.href);
+    if(url.origin!==target.origin||url.pathname!==target.pathname||url.searchParams.get('r')!==routeId||!/^#token=[a-f0-9]{64}$/.test(url.hash))throw new Error('O servidor não confirmou um acesso válido para a rota selecionada.');
+    return value;
+  }
   class RoutineManager {
     constructor(planner) {
       this.p=planner;this.current=null;this.canWrite=false;this.dirty=false;this.generation=0;
@@ -20,7 +35,14 @@
     async api(path,body,options={}) {
       const response=await window.entregasFetch(path,{...options,...(body?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:{cache:'no-store'})});
       const data=await response.json();
-      if(!response.ok||data.success===false) {const error=new Error(data.error||'Não foi possível concluir a solicitação.');error.status=response.status;error.code=data.code;throw error;}
+      if(!response.ok||!data||typeof data!=='object'||data.success===false) {const error=new Error(data?.error||'Não foi possível concluir a solicitação.');error.status=response.status;error.code=data?.code;throw error;}
+      if(body&&data.success!==true)throw new Error('O servidor não confirmou a operação. Suas alterações locais foram preservadas.');
+      if(path.startsWith('api/routine_write.php')||path.startsWith('api/routine_read.php?id=')) {
+        if(data.success!==true)throw new Error('O servidor não confirmou a operação. Suas alterações locais foram preservadas.');
+        const expectedId=body?.routine_id||new URL(path,location.href).searchParams.get('id');
+        confirmedRoutine(data.routine,expectedId);
+        if(body?.action==='update'&&data.routine.version<=body.expected_version)throw new Error('O servidor não confirmou uma versão posterior ao planejamento enviado. Suas alterações locais foram preservadas.');
+      }
       return data;
     }
     async init() {
@@ -80,7 +102,7 @@
       for(const key of ['saveDeliveries','renderStopsList','updateMapMarkers','openExportModal','openFinishRotinaModal','confirmFinishRotina','toggleDeliveryStatus','optimizeSequence','localOptimize','loadArchivedRoute','updateOriginMarker','setOrigin'])original[key]=p[key].bind(p);
       for(const key of ['addDelivery','deleteStop','clearAllStops']) {
         const originalAction=p[key].bind(p);
-        p[key]=(...args)=>{if(this.current&&!this.editable()){alert('Esta rotina não permite alterações no planejamento.');return;}return originalAction(...args);};
+        p[key]=(...args)=>{if(this.current&&!this.editable()){alert('Esta rotina não permite alterações no planejamento.');return false;}return originalAction(...args);};
       }
       p.saveDeliveries=()=>{if(!this.current)return original.saveDeliveries();if(!this.applying&&this.editable())this.markDirty();};
       p.renderStopsList=()=>{original.renderStopsList();if(this.current)this.enhanceRows();};
@@ -135,6 +157,7 @@
     }
     markDirty() {
       if(!this.editable())return;
+      document.body.classList.remove('document-print-ready');
       this.dirty=true;this.generation++;this.current.status='draft';this.current.stops=clone(this.p.deliveries);this.current.origin=clone(this.p.currentOrigin);
       try {localStorage.setItem('plaswill_routine_edit_'+this.current.routine_id,JSON.stringify(this.current));this.cacheUnavailable=false;} catch(_){this.cacheUnavailable=true;}
       this.bar();
@@ -190,9 +213,10 @@
       } catch(error){this.message(error.message);if(!silent)alert(error.message);return false;}
     }
     apply(routine) {
+      document.body.classList.remove('document-print-ready');
       if(this.current?.routine_id!==routine.routine_id)this.pendingConflict=null;
       this.previewMarker?.remove();this.previewMarker=null;
-      this.applying=true;this.current=clone(routine);this.dirty=false;this.pendingSave=null;
+      this.applying=true;this.current=clone(routine);this.dirty=false;this.pendingSave=null;this.saveError=null;
       this.p.routineId=routine.routine_id;this.p.storageKey='plaswill_routine_draft_'+routine.routine_id;
       this.p.currentRouteId=routine.route_id;this.p.currentShareUrl=this.shareUrls.get(routine.routine_id)||null;
       this.p.currentOrigin=clone(routine.origin);this.p.deliveries=clone(routine.stops);
@@ -202,6 +226,7 @@
     bar() {
       const exportButton=document.querySelector('.btn-export-header');
       const onList=!this.$('routines-view').hidden;
+      this.$('routine-new').disabled=!this.canWrite||!!this.operating||!!this.dispatching;
       exportButton.disabled=onList||!!this.current&&(!this.canWrite||['finished','cancelled'].includes(this.current.status));
       const badge=document.getElementById('badge-rotina-active');
       if(onList){badge.textContent='GESTÃO DE ROTINAS';badge.style.color='var(--pw-text-muted)';}
@@ -216,8 +241,8 @@
       this.$('routine-current-name').textContent=r.name;
       const destinations=new Set(this.p.deliveries.map(s=>['logradouro','numero','complemento','bairro','municipio','uf','cep'].map(k=>String(s[k]||'').trim().toLocaleLowerCase('pt-BR').normalize('NFD').replace(/[\u0300-\u036f]/g,'')).join('|'))).size;
       this.$('routine-current-summary').textContent=`${shortDate(r.scheduled_date)} · ${names[r.status]} · ${this.p.deliveries.length} entregas / ${destinations} destinos · ${r.origin.name} · ${r.route_id||'Ainda não despachada'}`;
-      this.$('routine-save-status').textContent=this.resolving?'Reaplicando alterações…':this.saving?'Salvando…':this.dirty?(this.cacheUnavailable?'Cache local indisponível — salve no servidor antes de sair.':'Alterações locais — salve para disponibilizar em outros computadores.'):`Salva no servidor · versão ${r.version}`;
-      for(const id of ['routine-edit-meta','routine-select-addresses','routine-save','routine-plan','routine-dispatch'])this.$(id).disabled=!this.editable()||!!this.saving||!!this.dispatching||!!this.resolving;
+      this.$('routine-save-status').textContent=this.resolving?'Reaplicando alterações…':this.saving?'Salvando…':this.operating||this.dispatching?'Concluindo operação…':this.saveError|| (this.dirty?(this.cacheUnavailable?'Cache local indisponível — salve no servidor antes de sair.':'Alterações locais — salve para disponibilizar em outros computadores.'):`Salva no servidor · versão ${r.version}`);
+      for(const id of ['routine-edit-meta','routine-select-addresses','routine-save','routine-plan','routine-dispatch'])this.$(id).disabled=!this.editable()||!!this.saving||!!this.dispatching||!!this.operating||!!this.resolving;
       const active=!!r.route_id&&!['finished','cancelled'].includes(r.status);
       if(!onList){badge.textContent=names[r.status].toUpperCase();badge.style.color=r.status==='cancelled'?'#fda4af':r.status==='finished'?'#6ee7b7':'var(--pw-yellow)';}
       document.querySelector('[onclick*="openFinishRotinaModal"]').disabled=!active||!this.canWrite;
@@ -226,7 +251,8 @@
       this.$('routine-dispatch').hidden=!!r.route_id||['cancelled','finished'].includes(r.status);
       this.$('routine-share').hidden=!active||!this.canWrite;this.$('routine-finish').hidden=!active||!this.canWrite;
       this.$('routine-reapply').disabled=!!this.resolving||!!this.saving;this.$('routine-reload').disabled=!!this.resolving||!!this.saving;
-      this.$('routine-cancel').disabled=!this.canWrite||['finished','cancelled'].includes(r.status)||!!this.saving;
+      for(const id of ['routine-share','routine-finish'])this.$(id).disabled=!!this.operating||!!this.dispatching;
+      this.$('routine-cancel').disabled=!this.canWrite||['finished','cancelled'].includes(r.status)||!!this.saving||!!this.operating||!!this.dispatching;
     }
     async metadata(edit) {
       if(!this.canWrite||edit&&!this.editable())return;
@@ -254,7 +280,7 @@
       } catch(error){this.$('routine-meta-error').textContent=error.message;} finally {submit.disabled=false;}
     }
     async ensureSaved() {
-      if(this.resolving)return false;
+      if(this.resolving||this.dispatching||this.operating||this.p.sharingLegacy||this.p.finishingLegacy)return false;
       while(this.dirty)if(!await this.save())return false;
       return true;
     }
@@ -264,14 +290,14 @@
       const r=this.current;const generation=this.generation;
       const body={action:'update',routine_id:r.routine_id,expected_version:r.version,name:r.name,scheduled_date:r.scheduled_date,origin:this.p.currentOrigin,motorista:r.motorista,veiculo:r.veiculo,notes:r.notes,stops:clone(this.p.deliveries),status:status||r.status};
       const key=JSON.stringify(body);if(this.pendingSave?.key!==key)this.pendingSave={key,id:crypto.randomUUID()};body.operation_id=this.pendingSave.id;
-      this.saving=true;this.bar();
+      this.saving=true;this.saveError=null;this.bar();
       this.savePromise=(async()=>{
         try {
           const {routine}=await this.api('api/routine_write.php',body);this.pendingSave=null;
           if(generation===this.generation){try{localStorage.removeItem('plaswill_routine_edit_'+r.routine_id);}catch(_){}this.pendingConflict=null;this.apply(routine);}
           else {this.current.version=routine.version;this.markDirty();}
           return true;
-        } catch(error) {this.pendingConflict=clone({...this.current,stops:this.p.deliveries,origin:this.p.currentOrigin});this.conflict(error.message);return false;}
+        } catch(error) {this.markDirty();this.saveError='Não foi possível salvar. Suas alterações locais foram preservadas.';this.pendingConflict=clone({...this.current,stops:this.p.deliveries,origin:this.p.currentOrigin});this.conflict(error.message);return false;}
         finally {this.saving=false;this.savePromise=null;this.bar();}
       })();
       return this.savePromise;
@@ -402,9 +428,11 @@
       this.$('routine-dispatch-confirm').disabled=!r.stops.length||!!invalid.length||!!incomplete.length;this.$('routine-dispatch-error').textContent='';this.$('routine-dispatch-dialog').showModal();
     }
     async dispatch() {
-      if(this.dispatching||!this.editable())return;this.dispatching=true;this.$('routine-dispatch-confirm').disabled=true;this.bar();
+      if(this.dispatching||this.operating||!this.editable())return;this.dispatching=true;this.$('routine-dispatch-confirm').disabled=true;this.bar();
       try {
         const result=await this.api('api/routine_write.php',{action:'dispatch',routine_id:this.current.routine_id,expected_version:this.current.version});
+        if(result.route_id!==result.routine.route_id)throw new Error('O servidor não confirmou a associação do despacho.');
+        if(result.share_url)confirmedShareUrl(result.share_url,result.route_id);
         this.apply(result.routine);this.$('routine-dispatch-dialog').close();
         if(result.share_url){this.shareUrls.set(this.current.routine_id,result.share_url);this.p.presentShareUrl(result.share_url);}
         else this.conflict('Despacho já confirmado. A rota foi preservada; use Compartilhar para reemitir o acesso, se necessário.');
@@ -412,27 +440,29 @@
       finally{this.dispatching=false;this.bar();}
     }
     async share() {
-      if(!this.canWrite||!this.current?.route_id||['finished','cancelled'].includes(this.current.status))return;
-      let url=this.shareUrls.get(this.current.routine_id);
+      if(this.operating||this.dispatching||!this.canWrite||!this.current?.route_id||['finished','cancelled'].includes(this.current.status))return;
+      const current=this.current;let url=this.shareUrls.get(current.routine_id);this.operating=true;this.bar();
       try {
         if(!url){if(!confirm('Emitir um novo link para esta rotina? O acesso anterior do motorista será revogado.'))return;
-          const result=await this.api('api/issue_route_access.php',{route_id:this.current.route_id});url=result.share_url;this.shareUrls.set(this.current.routine_id,url);}
-        this.p.currentRouteId=this.current.route_id;this.p.presentShareUrl(url);
-      } catch(error){this.conflict(error.message);}
+          const result=await this.api('api/issue_route_access.php',{route_id:current.route_id});url=confirmedShareUrl(result.share_url,current.route_id);this.shareUrls.set(current.routine_id,url);}
+        confirmedShareUrl(url,current.route_id);this.p.currentRouteId=current.route_id;this.p.presentShareUrl(url);
+      } catch(error){this.conflict(error.message);}finally{this.operating=false;this.bar();}
     }
     async finish() {
-      if(!this.canWrite||!this.current?.route_id)return;
-      try {await this.api('api/finish_route.php',{route_id:this.current.route_id,observacoes:document.getElementById('finish-notes')?.value||''});this.p.closeModal('modal-finish-rotina');await this.open(this.current.routine_id,true);}catch(error){this.conflict(error.message);}
+      if(this.operating||this.dispatching||!this.canWrite||!this.current?.route_id)return;
+      const current=this.current;this.operating=true;this.bar();
+      try {await this.api('api/finish_route.php',{route_id:current.route_id,observacoes:document.getElementById('finish-notes')?.value||''});this.p.closeModal('modal-finish-rotina');await this.open(current.routine_id,true);}catch(error){this.conflict(error.message);}finally{this.operating=false;this.bar();}
     }
     async cancel() {
       if(!this.canWrite||!this.current||['finished','cancelled'].includes(this.current.status))return;
       if(!await this.ensureSaved())return;
       const reason=prompt('Motivo do cancelamento. Se já despachada, o acesso do motorista será revogado e as entregas realizadas serão preservadas.');if(reason===null)return;
       if(!confirm('Confirmar cancelamento desta rotina, sem excluir seus dados?'))return;
-      try {const {routine}=await this.api('api/routine_write.php',{action:'cancel',routine_id:this.current.routine_id,expected_version:this.current.version,reason});this.apply(routine);}catch(error){this.conflict(error.message);}
+      this.operating=true;this.bar();
+      try {const {routine}=await this.api('api/routine_write.php',{action:'cancel',routine_id:this.current.routine_id,expected_version:this.current.version,reason});this.apply(routine);}catch(error){this.conflict(error.message);}finally{this.operating=false;this.bar();}
     }
     async poll() {
-      if(document.hidden||this.dirty||this.saving||this.dispatching||this.resolving||document.querySelector('dialog[open]'))return;
+      if(document.hidden||this.dirty||this.saving||this.dispatching||this.operating||this.resolving||this.pendingConflict||document.querySelector('dialog[open]'))return;
       if(!this.$('routines-view').hidden)await this.list();
       else if(this.current?.route_id)await this.open(this.current.routine_id,true);
     }

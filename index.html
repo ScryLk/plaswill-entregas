@@ -52,6 +52,7 @@
     <!-- Ações do Topo -->
     <div class="header-actions">
       <span id="corporate-session-status" role="status" aria-live="polite"></span>
+      <div id="local-storage-feedback" role="alert" hidden><span></span> <button type="button" onclick="planner.downloadLocalRecovery()">Baixar cópia local para revisão</button></div>
       <a id="corporate-login" class="btn-driver-mode-link" href="api/auth_login.php" hidden>Entrar pelo GED</a>
       <button id="corporate-logout" class="btn-header-history" type="button" hidden>Sair</button>
       <!-- Botão Histórico de Rotinas -->
@@ -67,9 +68,9 @@
       </a>
 
       <!-- Botão Exportar Rota (com QR Code / WhatsApp) -->
-      <button class="btn-export-header" onclick="window.planner.openExportModal()" title="Exportar Rota e Romaneio para o Motorista">
+      <button class="btn-export-header" onclick="window.planner.openExportModal()" title="Despachar planejamento ou compartilhar acesso ao motorista">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path><polyline points="16 6 12 2 8 6"></polyline><line x1="12" y1="2" x2="12" y2="15"></line></svg>
-        <span>Exportar Rota</span>
+        <span>Despachar / Compartilhar</span>
       </button>
 
       <button class="btn-icon" onclick="window.planner.openModal('modal-settings')" title="Configurações e Origem">
@@ -122,6 +123,11 @@
       </button>
     </div>
 
+    <section class="document-actions" aria-label="Documentos da seleção">
+      <button type="button" class="routine-secondary" id="document-romaneio" onclick="window.planner.printRomaneio()">Imprimir romaneio</button>
+      <button type="button" class="routine-secondary" id="document-report" onclick="window.planner.printReport()">Exportar relatório / PDF</button>
+      <p id="document-feedback" role="status" aria-live="polite">Documentos usam a versão salva no servidor. A cópia de recuperação não é um relatório operacional.</p>
+    </section>
     <!-- MAPA LEAFLET (PONTINHOS DE ENTREGA) -->
     <div id="map-container" class="map-view">
       <button class="leaflet-custom-locate-btn" onclick="window.planner.locateDriver()" title="Minha Localização GPS">
@@ -230,16 +236,18 @@
           <div class="obsidian-search-card">
             <div class="obsidian-badge-tag">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
-              <span>Base Obsidian & SGE (1.600+ Clientes)</span>
+              <span>Catálogo corporativo local · seleção de endereços</span>
             </div>
             <div class="search-input-wrapper">
               <svg class="search-input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-              <input type="text" id="manual-client-search" class="search-input" placeholder="Digite o nome do cliente (ex: Gráfica Panambi, Cotripal, Bruning, Roleplast)..." autocomplete="off">
+              <input type="text" id="manual-client-search" class="search-input" placeholder="Pesquise nome, código, rua ou município..." aria-label="Pesquisar no catálogo corporativo local" autocomplete="off">
             </div>
 
             <!-- Lista Flutuante de Sugestões Instantâneas -->
             <div class="instant-suggestions" id="manual-suggestions-box" style="display: none;"></div>
           </div>
+
+          <p id="manual-source-note" class="form-label" role="status">Confira os dados desta entrega. Este formulário não altera o cadastro do ERP.</p>
 
           <!-- Formulário Completo de Entrega -->
           <form id="form-manual-delivery" onsubmit="window.planner.submitManualDelivery(event)" style="display: flex; flex-direction: column; gap: 10px; margin-top: 14px;">
@@ -285,13 +293,19 @@
               </div>
             </div>
 
-            <!-- Coordenadas ocultas ou calculadas -->
-            <input type="hidden" id="form-lat" value="">
-            <input type="hidden" id="form-lon" value="">
+            <div style="display:grid;grid-template-columns:2fr 1fr;gap:10px">
+              <div><label class="form-label" for="form-complemento">Complemento</label><input id="form-complemento" class="form-input" maxlength="500"></div>
+              <div><label class="form-label" for="form-volumes">Volumes (opcional)</label><input id="form-volumes" class="form-input" type="number" min="0" max="100000" step="1"></div>
+            </div>
+            <div><label class="form-label" for="form-observacoes">Observações da entrega</label><input id="form-observacoes" class="form-input" maxlength="2000"></div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+              <div><label class="form-label" for="form-lat">Latitude revisada</label><input type="number" step="any" min="-90" max="90" id="form-lat" class="form-input" value=""></div>
+              <div><label class="form-label" for="form-lon">Longitude revisada</label><input type="number" step="any" min="-180" max="180" id="form-lon" class="form-input" value=""></div>
+            </div>
 
             <button type="submit" class="btn-submit-delivery">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8"><polyline points="20 6 9 17 4 12"></polyline></svg>
-              <span>Salvar Entrega na Tabela e Plotar no Mapa</span>
+              <span>Confirmar dados e adicionar ao planejamento</span>
             </button>
           </form>
 
@@ -305,7 +319,7 @@
           <div class="upload-dropzone" id="danfe-dropzone" onclick="document.getElementById('danfe-file-input').click()">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
             <b>Toque para Tirar Foto ou Selecionar DANFE</b>
-            <p>O modelo Gemini Vision lerá o destinatário, endereço, volumes e NF automaticamente.</p>
+            <p>A IA sugere dados da nota. Confira o destinatário, endereço, NF e localização antes de confirmar.</p>
           </div>
 
           <div class="ai-loading-box" id="ai-loading-danfe">
@@ -349,10 +363,19 @@
                 <label class="form-label">Itens / Volumes</label>
                 <input type="text" id="danfe-res-itens" class="form-input">
               </div>
+              <div style="display:grid;grid-template-columns:2fr 1fr;gap:8px">
+                <div><label class="form-label" for="danfe-res-cidade">Município</label><input id="danfe-res-cidade" class="form-input"></div>
+                <div><label class="form-label" for="danfe-res-uf">UF</label><input id="danfe-res-uf" class="form-input" maxlength="2"></div>
+              </div>
+              <div style="display:grid;grid-template-columns:2fr 1fr;gap:8px">
+                <div><label class="form-label" for="danfe-res-complemento">Complemento</label><input id="danfe-res-complemento" class="form-input"></div>
+                <div><label class="form-label" for="danfe-res-volumes">Volumes (opcional)</label><input id="danfe-res-volumes" class="form-input" type="number" min="0" max="100000" step="1"></div>
+              </div>
+              <div><label class="form-label" for="danfe-res-observacoes">Observações</label><input id="danfe-res-observacoes" class="form-input"></div>
 
               <button id="btn-confirm-danfe" class="btn-submit-delivery" onclick="window.planner.confirmDanfeStop()" style="margin-top: 10px; display: none;">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                <span>Confirmar e Inserir na Tabela</span>
+                <span>Conferir dados e localização</span>
               </button>
             </div>
           </div>
@@ -371,7 +394,7 @@
       <div class="modal-header">
         <h2>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path><polyline points="16 6 12 2 8 6"></polyline><line x1="12" y1="2" x2="12" y2="15"></line></svg>
-          Exportar Rota para o Motorista
+          Compartilhar acesso com o motorista
         </h2>
         <button class="btn-close-modal" onclick="window.planner.closeModal('modal-export-route')">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
@@ -405,9 +428,9 @@
         <div class="export-box">
           <div class="export-box-title">
             <span class="step-num">2</span>
-            <b>Romaneio Impresso com QR Code (Folha A4 / PDF)</b>
+            <b>Acesso do motorista e documento operacional</b>
           </div>
-          <p class="export-box-desc">Grampeie esta folha junto às notas físicas. Ao apontar o celular para o QR Code, a rota se abre pronta para dirigir.</p>
+          <p class="export-box-desc">O QR Code abaixo contém a credencial do motorista. Compartilhe somente com a pessoa autorizada. O romaneio é gerado separadamente com os dados do servidor, sem essa credencial.</p>
           
           <div class="qrcode-wrapper">
             <div id="export-qrcode-box" class="qrcode-box"></div>
@@ -565,40 +588,39 @@
     <div class="print-header">
       <div class="print-logo-area">
         <img src="img/plaswill_logo.png" alt="Plaswill" style="height: 38px; width: auto; object-fit: contain; margin-bottom: 4px;">
-        <h1 class="print-title">ROMANEIO & ROTEIRO DE ENTREGAS</h1>
-        <p class="print-subtitle">Expedição e Logística • Panambi - RS</p>
+        <h1 class="print-title" id="print-document-title"></h1>
+        <p class="print-subtitle">Expedição e Logística • Plaswill</p><p id="print-document-notice"></p>
       </div>
       <div class="print-meta-box">
-        <div><b>Código:</b> <span id="print-route-code">ROT-XXXX</span></div>
-        <div><b>Data:</b> <span id="print-route-date">23/10/2026</span></div>
-        <div><b>Origem:</b> <span id="print-route-origin">Plaswill Indústria</span></div>
-        <div><b>Total Entregas:</b> <span id="print-route-total">0</span></div>
+        <div><b>Rota:</b> <span id="print-route-code"></span></div>
+        <div><b>Rotina:</b> <span id="print-routine-code"></span></div>
+        <div><b>Nome:</b> <span id="print-routine-name"></span></div>
+        <div><b>Situação:</b> <span id="print-document-state"></span></div>
+        <div><b>Motorista:</b> <span id="print-driver"></span></div>
+        <div><b>Veículo:</b> <span id="print-vehicle"></span></div>
+        <div><b>Data:</b> <span id="print-route-date"></span></div>
+        <div><b>Origem:</b> <span id="print-route-origin"></span></div>
+        <div><b>Total Entregas:</b> <span id="print-route-total"></span></div>
       </div>
-      <div class="print-qr-area">
+      <div class="print-qr-area" hidden>
         <div id="print-qrcode-canvas"></div>
-        <span class="print-qr-label">Escaneie para Navegar (Waze / Google Maps)</span>
+
       </div>
     </div>
 
     <table class="print-table">
-      <thead>
-        <tr>
-          <th style="width: 38px; text-align: center;">#</th>
-          <th style="width: 70px;">NF-e</th>
-          <th>Destinatário</th>
-          <th>Endereço Completo & Bairro</th>
-          <th>Mercadorias / Volumes</th>
-          <th style="width: 140px;">Recebido por / Assinatura</th>
-        </tr>
-      </thead>
+      <thead><tr id="print-table-head"></tr></thead>
       <tbody id="print-table-body">
         <!-- Linhas injetadas dinamicamente via JS -->
       </tbody>
     </table>
 
+    <p><b>Progresso:</b> <span id="print-progress"></span></p>
+    <p><b>Observações:</b> <span id="print-notes"></span></p>
+    <p><b>Emitido em:</b> <span id="print-issued-at"></span></p>
     <div class="print-footer">
-      <div><b>Controle de Expedição:</b> Romaneio emitido via Sistema de Entregas Plaswill.</div>
-      <div>Horário de Saída: ____:____ &nbsp;&nbsp;&nbsp;&nbsp; Horário de Retorno: ____:____ &nbsp;&nbsp;&nbsp;&nbsp; Assinatura do Motorista: _____________________________</div>
+      <div><b>Controle de Expedição:</b> Documento emitido via Sistema de Entregas Plaswill, a partir dos dados salvos no servidor.</div>
+      <div id="print-signature-fields">Horário de Saída: ____:____ &nbsp;&nbsp;&nbsp;&nbsp; Horário de Retorno: ____:____ &nbsp;&nbsp;&nbsp;&nbsp; Assinatura do Motorista: _____________________________</div>
     </div>
   </div>
 

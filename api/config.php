@@ -177,24 +177,7 @@ function geocodeAddress(string $query, string $municipio = "Panambi", string $uf
         if ($hit) return $hit;
     }
 
-    // Fallback final: se for outro município (ou zona rural/industrial não mapeada rua a rua no OSM),
-    // geocodifica pelo centro do município para não travar a operação da expedição
-    $cityHit = $queryNominatim([
-        "city" => $municipio,
-        "state" => $uf
-    ]) ?: $queryNominatim([
-        "q" => "{$municipio}, {$uf}, Brasil"
-    ]);
-
-    if ($cityHit) {
-        // Se cair exatamente no centro padrão de Panambi (-28.2917, -53.5019), aplica leve deslocamento
-        // para o Distrito Industrial (-28.2745, -53.5182) evitando bloqueio por coordenada genérica
-        if (abs($cityHit["lat"] - PANAMBI_DEFAULT_LAT) < 0.001 && abs($cityHit["lon"] - PANAMBI_DEFAULT_LON) < 0.001) {
-            $cityHit["lat"] = -28.2785;
-            $cityHit["lon"] = -53.5125;
-        }
-        return $cityHit;
-    }
-
+    // Sem correspondência de endereço, mantenha pendente para revisão humana.
+    // O centro do município e deslocamentos artificiais não identificam o destinatário.
     return null;
 }

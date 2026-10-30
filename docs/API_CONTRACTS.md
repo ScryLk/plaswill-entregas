@@ -28,4 +28,8 @@ Com cookie OAuth, todos os POST corporativos exigem X-CSRF-Token. Os papéis sã
 
 ## Rotinas e catálogo paginado
 
+Estabilização: `save_route.php` aceita `operation_id` opcional (16–100 caracteres alfanuméricos, `_` ou `-`). Sob o lock existente, ator+operação+fingerprint retornam o mesmo ROT em repetições; payload diferente retorna 409. O primeiro sucesso retorna token; replay retorna `replayed=true` e `share_url=null`, exigindo reemissão explícita pela API existente. Sem o campo, clientes antigos continuam compatíveis mas não recebem garantia de idempotência de criação. O novo painel preserva a chave antes de enviar, inclusive após reload. Recibo privado fica no próprio documento atômico, sem token bruto.
+
+Catálogo retorna proveniência `corporate_catalog`; busca individual usa catálogo por padrão, sem fallback generativo implícito (`ai=1` é ação explícita da API legada). Dados sensíveis são omitidos por whitelist. DANFE retorna sugestão com `source=danfe_ai`/`needs_review=true`; geocodificação inconclusiva retorna coordenadas null, sem jitter ou município/UF inventados. O novo `danfe_delivery.php` é helper privado, não endpoint. Documentos usam somente GETs autorizados já existentes; impressão não emite tokens.
+
 `routine_read.php` (GET: lista, detalhe e progresso), `routine_write.php` (POST: create/update/dispatch/cancel) e `search_company.php?mode=catalog` reutilizam a autorização atual. Supervisão só lê rotinas; motorista não recebe acesso corporativo pelo token. Contratos completos, expected_version/operation_id, filtros e respostas de replay estão em [ROUTINES.md](ROUTINES.md). `pending`/`delivered` são preservados; cancelamento de rotina revoga capacidade e impede novas alterações/finalização da rota cancelada.

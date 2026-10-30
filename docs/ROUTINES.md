@@ -10,7 +10,7 @@ A entrada do painel passa a ser **Rotinas de Entregas**, com tabela, pesquisa, p
 4. Adicionar à rotina → gera uma entrega por seleção e salva no servidor. Selecionar novamente um cadastro que já possui entrega sem NF pede confirmação; não se deduplica por latitude/longitude. Duas notas para o mesmo destino são entregas distintas.
 5. Planejamento → editar entregas/NFs/volumes/observações, remover, mover para cima/baixo, incluir manualmente ou por DANFE, otimizar, salvar rascunho ou marcar planejada.
 6. Despachar Rotina → conferência de data, origem, motorista, veículo, sequência, entregas/destinos e pendências. Só confirma com entregas e endereços/coordenadas válidos.
-7. Compartilhar → utiliza apresentação existente de QR/WhatsApp e romaneio A4. Cada rotina mantém sua rota e seu link, sem reutilizar o ID de outra seleção no navegador.
+7. Compartilhar → QR/WhatsApp com acesso autorizado. Imprimir romaneio e Exportar relatório/PDF são ações independentes, com leitura dos dados confirmados no servidor, sem emitir tokens. Rascunho salvo pode gerar relatório identificado como não despachado; romaneio exige rota. Cada rotina mantém sua associação, sem reutilizar links de outra seleção.
 8. Progresso → leitura dos dados persistidos da rota, atualização moderada a cada 30 segundos com página visível e sem edição local pendente. Finalizar reutiliza finish_route.php; cancelamento registra motivo/autor/data sem excluir os documentos.
 
 Selecionados do catálogo vivem em Map por rotina durante a sessão da página, inclusive ao fechar/reabrir o seletor. Confirme a inclusão para persistir entregas no servidor; seleções ainda não confirmadas não sobrevivem a fechar o navegador. Rascunhos confirmados e salvos estão disponíveis em outro computador autorizado. Cache local de edição usa uma chave própria por rotina e não substitui a persistência do servidor.
@@ -84,7 +84,7 @@ Rotas legadas permanecem consultáveis e aparecem no histórico existente, sem c
 
 Abrir uma rota pelo histórico só troca o contexto após confirmação e resposta válida do servidor; cancelamento ou erro preservam a rotina selecionada. Uma troca concluída limpa o link, WhatsApp e QR Codes anteriores e atualiza a URL da página. A exportação confere origem, caminho e identificador da rota antes de reutilizar um link em memória; um link de outra rota é descartado e a emissão segue as regras do backend, inclusive o bloqueio para rotas encerradas.
 
-Volume é um campo inteiro opcional, aceito no snapshot de rota e exibido no painel/motorista/romaneio quando não existe resumo textual. O shell do motorista passou ao cache v2 e motorista.js?v=4, sem apagar outbox/localStorage nem forçar ativação em abas abertas.
+Volume é um campo inteiro opcional. O romaneio/relatório exibe volumes e descrição separadamente, sem inventar quantidade ausente. O shell atual do motorista usa cache v3, motorista.js?v=5 e outbox.js?v=2, sem apagar outbox/localStorage nem forçar ativação. Escrita requer Web Locks, com outras abas somente leitura. Ver PERSISTENCIA_E_RECUPERACAO.md e PLANO_HOMOLOGACAO.md.
 
 Em produção, adicionar routine_read.php e routine_write.php à allowlist do web server e permitir routines.js/routines.css. Negar catalog.php, routines.php e todo data/routines/. router.php implementa isso apenas no servidor de desenvolvimento. Incluir routines/ e sessões/rotas no plano de backup protegido. Não mover dados operacionais ou aplicar configurações de VPS automaticamente.
 

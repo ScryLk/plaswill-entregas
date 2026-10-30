@@ -18,13 +18,16 @@ if ($geo) {
         "success" => true,
         "lat" => $geo["lat"],
         "lon" => $geo["lon"],
-        "display_name" => $geo["display_name"]
+        "display_name" => $geo["display_name"],
+        "source" => "nominatim",
+        "needs_review" => true
     ]);
 } else {
     jsonResponse([
         "success" => false,
-        "message" => "Endereço não localizado com precisão. Usando centro de Panambi.",
-        "lat" => PANAMBI_DEFAULT_LAT,
-        "lon" => PANAMBI_DEFAULT_LON
+        "message" => "Endereço não localizado. Confira o endereço ou informe coordenadas verificadas; nenhuma posição foi atribuída.",
+        "lat" => null,
+        "lon" => null,
+        "needs_review" => true
     ]);
 }

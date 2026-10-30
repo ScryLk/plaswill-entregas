@@ -33,6 +33,15 @@ class DriverApp {
   }
 
   async init() {
+    try { await this.initialize(); }
+    catch (_) {
+      this.localDataUnavailable = true;
+      this.showError('Não foi possível abrir os dados locais. Nenhum registro foi excluído. Preserve este aparelho e solicite revisão da expedição.');
+      this.releaseOutbox();
+    }
+  }
+
+  async initialize() {
     this.bindEvents();
 
     const params = new URLSearchParams(window.location.search);
@@ -54,12 +63,14 @@ class DriverApp {
 
     if (!/^ROT-[A-Z0-9]{4}$/.test(this.routeId)) { this.showError('Código de rota inválido.'); return; }
     const token = new URLSearchParams(location.hash.slice(1)).get('token');
-    if (token && /^[a-f0-9]{64}$/.test(token)) localStorage.setItem('plaswill_token_' + this.routeId, token);
+    const validToken = token && /^[a-f0-9]{64}$/.test(token);
+    if (validToken) localStorage.setItem('plaswill_token_' + this.routeId, token);
     history.replaceState({}, '', location.pathname + '?r=' + encodeURIComponent(this.routeId));
     this.outbox = new DeliveryOutbox(localStorage, this.routeId, e => this.apiFetch('api/update_route_status.php', {
       method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(e)
     }));
-    if (token) {
+    await this.claimOutbox();
+    if (validToken && this.outboxWritable) {
       this.outbox.items.forEach(e => { if (e.state === 'unauthorized') e.state = 'pending'; });
       this.outbox.persist();
     }
@@ -68,6 +79,29 @@ class DriverApp {
     document.getElementById('topbar-route-id').textContent = this.routeId;
 
     await this.loadRoute();
+  }
+
+  async claimOutbox() {
+    if (this.outboxWritable || this.pageLeaving) return;
+    if (!navigator.locks?.request) { this.outboxLockUnsupported = true; return; }
+    if (this.claimingOutbox) return this.claimingOutbox;
+    this.claimingOutbox = new Promise(resolve => {
+      navigator.locks.request('plaswill-outbox-' + this.routeId, {ifAvailable:true}, async lock => {
+        if (!lock || this.pageLeaving) { resolve(); return; }
+        try { this.outbox.reload(); }
+        catch (error) { this.localDataUnavailable = true;resolve(); this.showError(error.message); return; }
+        this.outboxWritable = true;
+        await new Promise(release => { this.outboxRelease = release; resolve(); });
+      }).catch(() => { this.outboxLockUnsupported = true; resolve(); });
+    });
+    try { await this.claimingOutbox; } finally { this.claimingOutbox = null; }
+  }
+
+  releaseOutbox() {
+    // Keep ownership until an in-flight receipt has been durably recorded.
+    if (this.outbox?.running) return;
+    this.outboxWritable = false;
+    this.outboxRelease?.();this.outboxRelease = null;
   }
 
   bindEvents() {
@@ -101,6 +135,7 @@ class DriverApp {
   }
 
   async loadRoute(isUserRefresh = false) {
+    if (this.localDataUnavailable) { this.showError('Dados locais indisponíveis. Preserve este aparelho e solicite revisão da expedição.'); return; }
     const loadingEl = document.getElementById('driver-loading');
     const errorEl = document.getElementById('driver-error');
     const progressPanel = document.getElementById('driver-progress-panel');
@@ -117,7 +152,9 @@ class DriverApp {
 
       loadingEl.style.display = 'none';
 
-      if (response.ok && data.success && data.route) {
+      if (response.ok && data.success && data.route?.route_id === this.routeId && Array.isArray(data.route.stops)) {
+        this.accessDenied = false;
+        localStorage.removeItem('plaswill_driver_denied_' + this.routeId);
         this.routeData = data.route;
 
         // Sincroniza eventuais baixas salvas localmente offline
@@ -133,10 +170,16 @@ class DriverApp {
       loadingEl.style.display = 'none';
 
       // Fallback: se estiver offline no meio da entrega, tenta carregar do cache local
-      if (err.status === 401 || err.status === 403) { this.showError('Acesso expirado ou revogado. Solicite novo link.'); return; }
+      if (err.status === 401 || err.status === 403 || this.accessDenied || localStorage.getItem('plaswill_driver_denied_' + this.routeId) === '1') {
+        this.denyAccess(); return;
+      }
       const cached = localStorage.getItem(this.storageKeyPrefix + this.routeId);
       if (cached) {
-        this.routeData = JSON.parse(cached);
+        try {
+          const saved = JSON.parse(cached);
+          if (saved.route_id !== this.routeId || !Array.isArray(saved.stops)) throw new Error('cache');
+          this.routeData = saved;this.mergeOfflineState();
+        } catch (_) { this.showError('Cópia local inválida. Nenhum registro foi excluído; solicite revisão da expedição.'); return; }
         this.renderRoute();
         progressPanel.style.display = 'block';
       } else {
@@ -151,12 +194,34 @@ class DriverApp {
       headers: {...options.headers, ...(token ? {Authorization: 'Bearer ' + token} : {})}});
   }
 
+  denyAccess() {
+    this.accessDenied = true;this.routeData = null;
+    try { localStorage.setItem('plaswill_driver_denied_' + this.routeId,'1'); } catch (_) { /* Never overwrite or clear the pending queue. */ }
+    this.showError('Acesso expirado ou revogado. Solicite novo link. Alterações locais foram preservadas.');
+  }
+
   installSync() {
     const status = document.createElement('p'); status.id = 'sync-status'; status.setAttribute('role', 'status');
     const retry = document.createElement('button'); retry.textContent = 'Atualizar sincronização';
     retry.addEventListener('click', () => this.outbox.items.some(e => e.state === 'conflict') ? this.resolveConflict() : this.sync(true));
     const host = document.getElementById('driver-progress-panel'); host.append(status, retry);
     window.addEventListener('online', () => this.sync());
+    window.addEventListener('pagehide', () => { this.pageLeaving = true;this.releaseOutbox(); });
+    window.addEventListener('pageshow', () => { this.pageLeaving = false;this.sync(); });
+    window.addEventListener('storage', event => {
+      if (this.outboxWritable && event.key === 'plaswill_token_' + this.routeId && /^[a-f0-9]{64}$/.test(event.newValue || '')) {
+        // Opening a replacement link in another tab supplies a new capability;
+        // only the owning tab may unlock and persist the preserved pending queue.
+        try {
+          this.outbox.items.forEach(e => { if (e.state === 'unauthorized') e.state = 'pending'; });
+          this.outbox.persist();this.sync(true);
+        } catch (_) { this.showError('Não foi possível preservar a fila local. Solicite revisão da expedição.'); }
+      }
+      if (!this.outboxWritable && event.key === this.outbox.key) {
+        try { this.outbox.reload();this.mergeOfflineState();this.renderRoute(); }
+        catch (_) { this.localDataUnavailable = true;this.showError('Fila local inválida. Preserve este aparelho para revisão da expedição.'); }
+      }
+    });
     document.addEventListener('visibilitychange', () => { if (!document.hidden) this.sync(); });
     setInterval(() => { if (!document.hidden) this.sync(); }, 15000);
     if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
@@ -164,19 +229,24 @@ class DriverApp {
   }
 
   async sync(force = false) {
-    await this.outbox.flush(force);
-    this.showSyncStatus();
-    if (!this.outbox.items.length) await this.loadRoute(true);
+    if (this.pageLeaving || this.localDataUnavailable || !this.outbox) return;
+    await this.claimOutbox();
+    try {
+      if (this.outboxWritable) await this.outbox.flush(force);
+      if (this.outbox.items.some(e => e.state === 'unauthorized')) { this.denyAccess(); return; }
+      this.showSyncStatus();
+      if (!this.outbox.items.length) await this.loadRoute(true);
+    } finally { if (this.pageLeaving) this.releaseOutbox(); }
   }
 
   async resolveConflict() {
-    if (this.outbox.running) return;
+    if (!this.outboxWritable || this.outbox.running) return;
     if (!confirm('Recarregar a versão do servidor e reenviar suas alterações locais sobre ela? Isso pode substituir alterações feitas em outro aparelho.')) return;
     try {
       const response = await this.apiFetch(`api/get_route.php?r=${encodeURIComponent(this.routeId)}`);
       const data = await response.json();
-      if (!response.ok || !data.success) throw new Error('Falha ao atualizar rota.');
-      if (data.route.status === 'finished') throw new Error('Rota encerrada. Alterações locais foram preservadas para revisão da expedição.');
+      if (!response.ok || !data.success || data.route?.route_id !== this.routeId || !Array.isArray(data.route.stops)) throw new Error('Falha ao atualizar rota.');
+      if (['finished','cancelled'].includes(data.route.status)) throw new Error('Rota encerrada. Alterações locais foram preservadas para revisão da expedição.');
       const states = new Map(data.route.stops.map(s => [s.id, {status:s.status,version:s.version || 0}]));
       const items = this.outbox.items.map(e => {
         const stop = states.get(e.stop_id);
@@ -197,7 +267,12 @@ class DriverApp {
   showSyncStatus() {
     const items = this.outbox?.items || [];
     const el = document.getElementById('sync-status');
-    if (el) el.textContent = items.some(e => e.state === 'conflict') ?
+    for (const button of document.querySelectorAll('.btn-toggle-delivered, #btn-driver-finish-rotina')) {
+      button.disabled = !this.outboxWritable || this.accessDenied || ['finished','cancelled'].includes(this.routeData?.status);
+    }
+    if (el) el.textContent = !this.outboxWritable ? (this.outboxLockUnsupported ?
+      'Somente leitura: este navegador não oferece coordenação segura. Use um navegador atualizado com HTTPS para registrar entregas.' :
+      'Somente leitura: outra aba controla esta rota. Feche a outra aba e atualize a sincronização para registrar entregas.') : items.some(e => e.state === 'conflict') ?
       'Conflito: alterações preservadas no aparelho. Atualize a rota e solicite revisão da expedição.' :
       items.some(e => e.state === 'unauthorized') ? 'Acesso recusado: solicite novo link. Alterações preservadas.' :
       items.length ? `${items.length} alteração(ões) no aparelho aguardando confirmação do servidor.` :
@@ -223,6 +298,7 @@ class DriverApp {
 
     loadingEl.style.display = 'none';
     progressPanel.style.display = 'none';
+    document.getElementById('stops-cards-container')?.replaceChildren();
     if (errorText) errorText.textContent = message;
     if (errorEl) errorEl.style.display = 'block';
   }
@@ -245,6 +321,7 @@ class DriverApp {
 
     this.updateProgress();
     this.renderStopsList();
+    this.showSyncStatus();
   }
 
   updateProgress() {
@@ -398,7 +475,8 @@ class DriverApp {
     }
 
     const newStatus = stop.status === 'delivered' ? 'pending' : 'delivered';
-    if (this.routeData.status === 'finished') { alert('Rota encerrada.'); return; }
+    if (['finished','cancelled'].includes(this.routeData.status)) { alert('Rota encerrada.'); return; }
+    if (!this.outboxWritable || this.pageLeaving) { alert('Somente leitura: feche a outra aba desta rota ou use um navegador compatível e atualize a sincronização.'); return; }
     if (this.outbox.items.some(e => ['conflict', 'unauthorized'].includes(e.state))) { alert('Resolva a sincronização antes de registrar novas alterações.'); return; }
     try { this.outbox.enqueue(stop, newStatus); }
     catch (_) { alert('Não foi possível salvar no aparelho. A entrega não foi alterada.'); return; }
@@ -481,6 +559,7 @@ class DriverApp {
 
   async finishCurrentRoute() {
     await this.sync(true);
+    if (!this.outboxWritable || this.pageLeaving || this.accessDenied) { alert('Não foi possível obter acesso de escrita a esta rota.'); return; }
     if (this.outbox.items.length) { alert('Sincronize as alterações pendentes antes de encerrar.'); return; }
     if (!confirm('Deseja concluir e arquivar esta rotina de entregas?')) return;
 

@@ -44,3 +44,17 @@ test('concurrent flushes are serialized',async()=>{
 test('cache delivered does not override confirmed pending without an event',()=>{
  const q=new Outbox(storage(),'ROT-2222',null);const route={stops:[{id:'a',status:'pending'}]};q.overlay(route);assert.equal(route.stops[0].status,'pending');
 });
+test('acknowledgement with impossible version preserves the pending operation',async()=>{
+ for (const version of [-1,0,50]) {
+  const q=new Outbox(storage(),'ROT-2222',async e=>({ok:true,json:async()=>({...await ack(e).json(),version})}));
+  q.enqueue({id:'a',status:'pending',version:0},'delivered');await q.flush();
+  assert.equal(q.items.length,1);
+ }
+});
+test('malformed durable queue fails closed without overwriting the original',()=>{
+ for (const original of ['{}','[null]','[{"route_id":"ROT-OTHER"}]']) {
+  const s=storage();s.setItem('plaswill_outbox_v1_ROT-2222',original);
+  assert.throws(()=>new Outbox(s,'ROT-2222',null));
+  assert.equal(s.getItem('plaswill_outbox_v1_ROT-2222'),original);
+ }
+});

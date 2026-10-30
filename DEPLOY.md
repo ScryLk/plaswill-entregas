@@ -4,7 +4,9 @@ A configuração legada abaixo não é suficiente para esta versão. Não realiz
 
 ## Módulo de rotinas
 
-Antes de publicar esta evolução, adicionar routine_read.php/routine_write.php à allowlist PHP e routines.js/routines.css aos estáticos. Bloquear api/catalog.php, api/routines.php e data/routines/. Incluir routines/ no backup e garantir escrita pelo mesmo usuário/protocolo de lock dos demais JSON. Não é necessária conversão de rotas antigas. Atualização do shell motorista usa cache v2 e JS v4 sem limpar operações offline. Ver docs/ROUTINES.md. Esta etapa continua sem autorização de deploy.
+Atualização de estabilização (30/10/2026): bloquear também o novo helper privado `api/danfe_delivery.php`. O shell atual usa cache v3, motorista.js?v=5 e outbox.js?v=2. Exige Web Locks para escrita offline; abas secundárias ou sem suporte ficam somente leitura. Encerrar/reabrir abas antigas coordenadamente, preservando pendências, pois writers antigos não respeitam a exclusão. Não limpar localStorage/outbox nem forçar ativação. Executar [PLANO_HOMOLOGACAO.md](docs/PLANO_HOMOLOGACAO.md) antes de qualquer publicação; não há autorização de deploy nesta auditoria.
+
+Antes de publicar esta evolução, adicionar routine_read.php/routine_write.php à allowlist PHP e routines.js/routines.css aos estáticos. Bloquear api/catalog.php, api/routines.php, api/danfe_delivery.php e data/routines/. Incluir routines/ no backup e garantir escrita pelo mesmo usuário/protocolo de lock dos demais JSON. Não é necessária conversão de rotas antigas. Ver docs/ROUTINES.md e a atualização acima. Esta etapa continua sem autorização de deploy.
 
 ## Checklist sequencial e rollback
 

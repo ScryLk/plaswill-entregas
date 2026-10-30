@@ -34,7 +34,9 @@ class DeliveryPlanner {
     this.bases = {};
     this.currentOrigin = null;
     this.deliveries = this.loadDeliveries();
-    this.currentRouteId = localStorage.getItem('plaswill_active_route_id');
+    this.currentRouteId = null;
+    try { this.currentRouteId = localStorage.getItem('plaswill_active_route_id'); }
+    catch (_) { this.localReadError = true; }
     this.driverCoords = null;
 
     this.map = null;
@@ -63,10 +65,11 @@ class DeliveryPlanner {
       document.getElementById('map-container').append(message);
     } else this.initMap();
     this.bindEvents();
-    const hasRouteParam = await this.checkUrlParams();
-    if (!hasRouteParam) {
-      this.checkFirstRunSeed();
-    }
+    await this.checkUrlParams();
+    this.showLocalStorageState();
+    window.addEventListener('beforeunload', event => {
+      if (this.localWriteError) { event.preventDefault(); event.returnValue = ''; }
+    });
     this.renderStopsList();
     this.updateMapMarkers();
 
@@ -423,17 +426,23 @@ class DeliveryPlanner {
   // GESTÃO DE ENTREGAS (ADD, TOGGLE, DELETE, REORDER)
   // =========================================================================
   addDelivery(deliveryData) {
-    if (['default_center_jitter','approximate','unresolved'].includes(deliveryData.geocoded_by)) {
-      alert('Localização aproximada. Revise as coordenadas no cadastro manual antes de adicionar a entrega.'); return;
+    if (this.sharingLegacy || this.finishingLegacy) { alert('Aguarde a confirmação da operação atual antes de alterar o planejamento.'); return false; }
+    if (!window.routineManager?.current && (this.localReadError || this.routeLoadFailed)) {
+      alert('Recupere o rascunho local ou recarregue a rota antes de incluir entregas. Os dados existentes foram preservados.'); return false;
     }
-    if (this.currentRouteId) { alert('Encerre a rota despachada antes de adicionar novas paradas.'); return; }
+    if (['default_center_jitter','approximate','unresolved'].includes(deliveryData.geocoded_by)) {
+      alert('Localização aproximada. Revise as coordenadas no cadastro manual antes de adicionar a entrega.'); return false;
+    }
+    if (this.currentRouteId) { alert('Encerre a rota despachada antes de adicionar novas paradas.'); return false; }
     this.deliveries.push(deliveryData);
     this.saveDeliveries();
     this.renderStopsList();
     this.updateMapMarkers();
+    return true;
   }
 
   async toggleDeliveryStatus(id) {
+    if (this.sharingLegacy || this.finishingLegacy) return false;
     const item = this.deliveries.find(d => d.id === id);
     if (!item) return;
     const status = item.status === 'delivered' ? 'pending' : 'delivered';
@@ -454,6 +463,7 @@ class DeliveryPlanner {
   }
 
   deleteStop(id) {
+    if (this.sharingLegacy || this.finishingLegacy) return false;
     if (this.currentRouteId) { alert('Uma rota despachada não pode ter paradas removidas.'); return; }
     if (!confirm('Deseja remover esta parada da lista?')) return;
     this.deliveries = this.deliveries.filter(d => d.id !== id);
@@ -463,6 +473,7 @@ class DeliveryPlanner {
   }
 
   clearAllStops() {
+    if (this.sharingLegacy || this.finishingLegacy) return false;
     if (this.currentRouteId) { alert('Encerre a rotina despachada antes de limpar a lista.'); return; }
     if (this.deliveries.length === 0) return;
     if (!confirm('Tem certeza que deseja limpar todas as entregas do dia?')) return;
@@ -472,12 +483,21 @@ class DeliveryPlanner {
     this.updateMapMarkers();
   }
 
+  planningContext() {
+    return JSON.stringify([this.storageKey, this.currentRouteId, this.currentOrigin, this.deliveries,
+      window.routineManager?.current?.routine_id, window.routineManager?.generation]);
+  }
+
   async optimizeSequence() {
+    if (this.optimizing || this.sharingLegacy || this.finishingLegacy) return false;
     if (this.deliveries.length <= 1) {
       alert('Adicione pelo menos 2 entregas para otimizar a sequência.');
       return;
     }
 
+    const snapshot = this.planningContext();
+    const isCurrent = () => this.planningContext() === snapshot && !this.sharingLegacy && !this.finishingLegacy && !window.routineManager?.dispatching && !window.routineManager?.operating;
+    this.optimizing = true;
     const btn = document.getElementById('btn-optimize-stops');
     const originalText = btn ? btn.innerHTML : '';
     if (btn) btn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="spin-icon"><path d="M21 12a9 9 0 1 1-6.219-8.56"></path></svg> <span>Otimizando...</span>';
@@ -493,25 +513,31 @@ class DeliveryPlanner {
       });
 
       const res = await response.json();
-      if (res.success && res.ordered_stops) {
+      if (!isCurrent()) return false;
+      if (response.ok && res.success && Array.isArray(res.ordered_stops)) {
         this.deliveries = res.ordered_stops;
         this.saveDeliveries();
         this.renderStopsList();
         this.updateMapMarkers();
         alert('Sequência otimizada com sucesso por proximidade de bairros!');
+        return true;
       } else {
         throw new Error(res.error || 'Erro na otimização');
       }
     } catch (err) {
+      if (!isCurrent()) return false;
       console.warn('Fallback local para otimização:', err);
       // Fallback local simples pelo vizinho mais próximo
-      this.localOptimize();
+      await this.localOptimize();
+      return true;
     } finally {
+      this.optimizing = false;
       if (btn) btn.innerHTML = originalText;
     }
   }
 
   localOptimize() {
+    if (this.sharingLegacy || this.finishingLegacy) return false;
     let unvisited = [...this.deliveries];
     let ordered = [];
     let curLat = this.currentOrigin.lat;
@@ -553,10 +579,16 @@ class DeliveryPlanner {
     const confirmBtn = document.getElementById('btn-confirm-danfe');
 
     if (!file) return;
+    const sequence=this.danfeSequence=(this.danfeSequence||0)+1;
+    const context=this.storageKey;
+    this.danfeAbort?.abort();this.danfeAbort=new AbortController();
+    this.pendingDanfeDelivery=null;confirmBtn.style.display='none';
+    if(file.size>5242880||!['image/jpeg','image/png','image/webp'].includes(file.type)){alert('Envie uma imagem JPEG, PNG ou WebP de até 5 MiB.');return;}
 
     // Mostra preview
     const reader = new FileReader();
     reader.onload = async (e) => {
+      if(sequence!==this.danfeSequence||context!==this.storageKey)return;
       previewImg.src = e.target.result;
       dropzone.style.display = 'none';
       previewArea.style.display = 'flex';
@@ -568,13 +600,15 @@ class DeliveryPlanner {
 
         const response = await window.entregasFetch('api/process_danfe.php', {
           method: 'POST',
-          body: formData
+          body: formData,
+          signal:this.danfeAbort.signal
         });
 
         const res = await response.json();
+        if(sequence!==this.danfeSequence||context!==this.storageKey)return;
         loadingBox.style.display = 'none';
 
-        if (res.success && res.delivery) {
+        if (response.ok && res.success && res.delivery && typeof res.delivery==='object' && typeof res.delivery.destinatario==='string') {
           const d = res.delivery;
           document.getElementById('danfe-res-destinatario').value = d.destinatario || '';
           document.getElementById('danfe-res-logradouro').value = d.logradouro || '';
@@ -582,6 +616,9 @@ class DeliveryPlanner {
           document.getElementById('danfe-res-bairro').value = d.bairro || '';
           document.getElementById('danfe-res-nf').value = d.numero_nota || '';
           document.getElementById('danfe-res-itens').value = d.itens_resumo || '';
+          for(const [field,key]of Object.entries({'cidade':'municipio','uf':'uf','complemento':'complemento','volumes':'volumes','observacoes':'observacoes'})){
+            const input=document.getElementById('danfe-res-'+field);if(input)input.value=d[key]??'';
+          }
 
           // Guarda objeto temporário para confirmação
           this.pendingDanfeDelivery = d;
@@ -591,6 +628,7 @@ class DeliveryPlanner {
           this.resetDanfeModal();
         }
       } catch (err) {
+        if(sequence!==this.danfeSequence||context!==this.storageKey||err.name==='AbortError')return;
         loadingBox.style.display = 'none';
         alert('Erro ao enviar imagem para IA: ' + err.message);
         this.resetDanfeModal();
@@ -601,17 +639,24 @@ class DeliveryPlanner {
 
   confirmDanfeStop() {
     if (!this.pendingDanfeDelivery) return;
-
-    // Atualiza com eventuais correções manuais feitas no formulário
-    this.pendingDanfeDelivery.destinatario = document.getElementById('danfe-res-destinatario').value;
-    this.pendingDanfeDelivery.logradouro = document.getElementById('danfe-res-logradouro').value;
-    this.pendingDanfeDelivery.numero = document.getElementById('danfe-res-numero').value;
-    this.pendingDanfeDelivery.bairro = document.getElementById('danfe-res-bairro').value;
-    this.pendingDanfeDelivery.numero_nota = document.getElementById('danfe-res-nf').value;
-    this.pendingDanfeDelivery.itens_resumo = document.getElementById('danfe-res-itens').value;
-    this.pendingDanfeDelivery.endereco_completo = `${this.pendingDanfeDelivery.logradouro}, ${this.pendingDanfeDelivery.numero} - ${this.pendingDanfeDelivery.bairro}, ${this.pendingDanfeDelivery.municipio || 'Panambi'}`;
-
-    this.addDelivery(this.pendingDanfeDelivery);
+    const original=this.pendingDanfeDelivery;
+    const updated={...original};
+    for(const [field,key] of Object.entries({'destinatario':'destinatario','logradouro':'logradouro','numero':'numero','bairro':'bairro','nf':'numero_nota','itens':'itens_resumo','cidade':'municipio','uf':'uf','complemento':'complemento','observacoes':'observacoes'})){
+      const input=document.getElementById('danfe-res-'+field);if(input)updated[key]=input.value.trim();
+    }
+    const volumes=document.getElementById('danfe-res-volumes')?.value;
+    if(volumes!==''){updated.volumes=Number(volumes);}
+    const changed=this.addressSnapshot(original)!==this.addressSnapshot(updated);
+    if(changed||original.needs_review||!this.validDeliveryCoordinates(updated)){
+      if(changed){updated.lat=null;updated.lon=null;updated.geocoded_by='unresolved';}
+      this.fillManualFormWithCompany({...updated,nome:updated.destinatario});
+      document.getElementById('form-nfe').value=updated.numero_nota||'';
+      document.getElementById('form-itens').value=updated.itens_resumo||'';
+      this.switchCreateTab('manual');
+      alert('Confira os dados sugeridos pela IA e a localização no formulário antes de confirmar a entrega.');return;
+    }
+    updated.endereco_completo=[updated.logradouro,updated.numero,updated.complemento,updated.bairro,updated.municipio,updated.uf].filter(Boolean).join(', ');
+    if(!this.addDelivery(updated))return;
     this.pendingDanfeDelivery = null;
     this.closeModal('modal-create-delivery');
     this.resetDanfeModal();
@@ -646,7 +691,9 @@ class DeliveryPlanner {
 
     searchInput.addEventListener('input', (e) => {
       const query = e.target.value.trim();
-      clearTimeout(this.searchDebounceTimer);
+      clearTimeout(this.manualSearchTimer);
+      this.manualSearchAbort?.abort();this.manualSearchAbort=new AbortController();
+      const sequence=this.manualSearchSequence=(this.manualSearchSequence||0)+1;
 
       if (query.length === 0) {
         suggestionsBox.style.display = 'none';
@@ -654,10 +701,12 @@ class DeliveryPlanner {
         return;
       }
 
-      this.searchDebounceTimer = setTimeout(async () => {
+      this.manualSearchTimer = setTimeout(async () => {
         try {
-          const response = await window.entregasFetch(`api/search_company.php?q=${encodeURIComponent(query)}`);
+          const response = await window.entregasFetch(`api/search_company.php?mode=catalog&q=${encodeURIComponent(query)}`,{signal:this.manualSearchAbort.signal});
           const data = await response.json();
+          if(sequence!==this.manualSearchSequence||searchInput.value.trim()!==query)return;
+          if(!response.ok)throw new Error(data.error||'Não foi possível consultar o catálogo.');
 
           if (data.success && data.results && data.results.length > 0) {
             suggestionsBox.innerHTML = '';
@@ -696,7 +745,7 @@ class DeliveryPlanner {
             suggestionsBox.style.display = 'block';
           }
         } catch (err) {
-          console.warn('Erro ao buscar clientes:', err);
+          if(err.name!=='AbortError'&&sequence===this.manualSearchSequence){suggestionsBox.textContent='Não foi possível consultar o catálogo. Tente novamente ou preencha os dados manualmente.';suggestionsBox.style.display='block';}
         }
       }, 250);
     });
@@ -709,6 +758,14 @@ class DeliveryPlanner {
     });
   }
 
+  addressSnapshot(item) {
+    return ['logradouro','numero','complemento','bairro','municipio','uf'].map(k=>String(item[k]||'').trim().toLocaleLowerCase('pt-BR')).join('|');
+  }
+
+  validDeliveryCoordinates(item) {
+    return item.lat!==null&&item.lon!==null&&item.lat!==''&&item.lon!==''&&Number.isFinite(Number(item.lat))&&Number.isFinite(Number(item.lon))&&Math.abs(Number(item.lat))<=90&&Math.abs(Number(item.lon))<=180&&!(Math.abs(Number(item.lat)+28.2917)<.0001&&Math.abs(Number(item.lon)+53.5019)<.0001)&&!['unresolved','approximate','default_center_jitter'].includes(item.geocoded_by);
+  }
+
   fillManualFormWithCompany(item) {
     const destInput = document.getElementById('form-destinatario');
     const logInput = document.getElementById('form-logradouro');
@@ -719,14 +776,20 @@ class DeliveryPlanner {
     const latInput = document.getElementById('form-lat');
     const lonInput = document.getElementById('form-lon');
 
-    if (destInput) destInput.value = item.fantasia || item.nome || '';
+    if (destInput) destInput.value = item.destinatario || item.fantasia || item.nome || '';
     if (logInput) logInput.value = item.logradouro || '';
     if (numInput) numInput.value = item.numero || '';
     if (baiInput) baiInput.value = item.bairro || '';
-    if (cidInput) cidInput.value = item.municipio || 'Panambi';
-    if (ufInput) ufInput.value = item.uf || 'RS';
-    if (latInput) latInput.value = item.lat || '';
-    if (lonInput) lonInput.value = item.lon || '';
+    if (cidInput) cidInput.value = item.municipio || '';
+    if (ufInput) ufInput.value = item.uf || '';
+    if (latInput) latInput.value = this.validDeliveryCoordinates(item)?String(item.lat):'';
+    if (lonInput) lonInput.value = this.validDeliveryCoordinates(item)?String(item.lon):'';
+    for(const [id,key] of Object.entries({'form-complemento':'complemento','form-volumes':'volumes','form-observacoes':'observacoes'})){
+      const input=document.getElementById(id);if(input)input.value=item[key]??'';
+    }
+    this.manualCompany={client_id:item.client_id||'',address_id:item.address_id||'',snapshot:this.addressSnapshot(item),lat:latInput?.value,lon:lonInput?.value};
+    const note=document.getElementById('manual-source-note');
+    if(note)note.textContent=item.source==='danfe_ai'||item.tipo==='ai_search'||item.needs_review?'Sugestão não verificada. Confira destinatário, endereço e coordenadas antes de confirmar.':'Snapshot do catálogo local. Alterações aqui afetam somente esta entrega, sem atualizar o cadastro corporativo.';
 
     if (destInput) {
       destInput.style.borderColor = '#FFF212';
@@ -736,26 +799,39 @@ class DeliveryPlanner {
 
   async submitManualDelivery(event) {
     event.preventDefault();
+    if(this.manualSubmitting)return;
+    this.manualSubmitting=true;
+    const context=this.storageKey;
+    const fields=['destinatario','logradouro','numero','bairro','cidade','uf','nfe','itens','complemento','volumes','observacoes'];
+    const snapshot=()=>JSON.stringify(fields.map(field=>document.getElementById('form-'+field)?.value||''));
+    const formSnapshot=snapshot();
+    const button=document.getElementById('form-manual-delivery').querySelector('[type="submit"]');if(button)button.disabled=true;
+    try {
 
     const destinatario = document.getElementById('form-destinatario').value.trim();
     const logradouro = document.getElementById('form-logradouro').value.trim();
     const numero = document.getElementById('form-numero').value.trim();
     const bairro = document.getElementById('form-bairro').value.trim();
-    const cidade = document.getElementById('form-cidade').value.trim() || 'Panambi';
-    const uf = document.getElementById('form-uf').value.trim() || 'RS';
+    const cidade = document.getElementById('form-cidade').value.trim();
+    const uf = document.getElementById('form-uf').value.trim().toUpperCase();
+    const complemento=document.getElementById('form-complemento')?.value.trim()||'';
+    const volumesValue=document.getElementById('form-volumes')?.value||'';
+    const observacoes=document.getElementById('form-observacoes')?.value.trim()||'';
     const nfe = document.getElementById('form-nfe').value.trim();
     const itens = document.getElementById('form-itens').value.trim();
     let lat = parseFloat(document.getElementById('form-lat').value);
     let lon = parseFloat(document.getElementById('form-lon').value);
 
-    if (!destinatario || !logradouro) {
-      alert('Preencha pelo menos o Destinatário e o Logradouro.');
+    if (!destinatario || !logradouro || !cidade || !/^[A-Z]{2}$/.test(uf)) {
+      alert('Preencha destinatário, logradouro, município e UF de duas letras.');
       return;
     }
+    if(volumesValue!==''&&(!Number.isInteger(Number(volumesValue))||Number(volumesValue)<0||Number(volumesValue)>100000)){alert('Informe uma quantidade inteira de volumes entre 0 e 100000.');return;}
+    const address={logradouro,numero,complemento,bairro,municipio:cidade,uf};
+    if(this.manualCompany&&this.manualCompany.snapshot!==this.addressSnapshot(address)&&document.getElementById('form-lat').value===this.manualCompany.lat&&document.getElementById('form-lon').value===this.manualCompany.lon){lat=NaN;lon=NaN;document.getElementById('form-lat').value='';document.getElementById('form-lon').value='';}
 
     // Se não tiver coordenadas ou se forem as genéricas de centro de Panambi (-28.2917, -53.5019), geocodifica
-    const isGeneric = isNaN(lat) || isNaN(lon) || !lat || !lon ||
-      (Math.abs(lat - (-28.2917)) < 0.001 && Math.abs(lon - (-53.5019)) < 0.001);
+    const isGeneric = !this.validDeliveryCoordinates({lat,lon});
 
     if (isGeneric) {
       const cleanNum = (numero && !/^(s\/?n[º°]?|sem\s*n[uú]mero|0)$/i.test(numero.trim())) ? numero.trim() : '';
@@ -763,40 +839,47 @@ class DeliveryPlanner {
       try {
         const geoRes = await window.entregasFetch(`api/geocode.php?q=${encodeURIComponent(fullStreet)}&cidade=${encodeURIComponent(cidade)}&uf=${encodeURIComponent(uf)}`);
         const geoData = await geoRes.json();
-        if (geoData.success && geoData.lat && geoData.lon) {
+        if(context!==this.storageKey||snapshot()!==formSnapshot){alert('Os dados do planejamento mudaram durante a consulta. Confira o formulário antes de tentar novamente.');return;}
+        if (geoRes.ok && geoData.success && this.validDeliveryCoordinates(geoData)) {
           lat = parseFloat(geoData.lat);
           lon = parseFloat(geoData.lon);
+          document.getElementById('form-lat').value=String(lat);document.getElementById('form-lon').value=String(lon);
+          if(!confirm(`Localização sugerida: ${geoData.display_name||[logradouro,numero,cidade,uf].join(', ')} (${lat}, ${lon}). Confirme que corresponde ao destino.`))return;
         }
       } catch (e) {
         console.warn('Geocoding fallback:', e);
       }
 
-      if (isNaN(lat) || isNaN(lon) || !lat || !lon || (Math.abs(lat - (-28.2917)) < 0.001 && Math.abs(lon - (-53.5019)) < 0.001)) {
+      if (!this.validDeliveryCoordinates({lat,lon})) {
         alert('Endereço sem localização confiável. Informe coordenadas verificadas no cadastro manual.');
         return;
       }
     }
 
     const newDelivery = {
-      id: 'del_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
+      id: 'del_' + crypto.randomUUID(),
       destinatario: destinatario,
       nome_fantasia: destinatario,
       numero_nota: nfe,
-      itens_resumo: itens || '1 volume',
+      itens_resumo: itens,
+      complemento,observacoes,...(volumesValue!==''?{volumes:Number(volumesValue)}:{}),
+      client_id:this.manualCompany?.client_id||'',address_id:this.manualCompany?.address_id||'',
       logradouro: logradouro,
       numero: numero,
       bairro: bairro,
       municipio: cidade,
       uf: uf,
-      endereco_completo: `${logradouro}, ${numero} - ${bairro}, ${cidade} - ${uf}`,
+      endereco_completo: [logradouro,numero,complemento,bairro,cidade,uf].filter(Boolean).join(', '),
       lat: lat,
       lon: lon,
-      geocoded_by: 'nominatim_verified',
       status: 'pending',
+      geocoded_by:'manual_verified',
       created_at: new Date().toISOString()
     };
 
-    this.addDelivery(newDelivery);
+    if(context!==this.storageKey||snapshot()!==formSnapshot){alert('Os dados do planejamento mudaram durante a consulta. Confira o formulário antes de incluir a entrega.');return;}
+    if(!this.addDelivery(newDelivery))return;
+    this.manualCompany=null;this.pendingDanfeDelivery=null;
 
     // Reseta formulário
     document.getElementById('form-manual-delivery').reset();
@@ -808,9 +891,11 @@ class DeliveryPlanner {
     document.getElementById('manual-suggestions-box').style.display = 'none';
 
     this.closeModal('modal-create-delivery');
+    } finally {this.manualSubmitting=false;if(button)button.disabled=false;}
   }
 
   resetDanfeModal() {
+    this.danfeAbort?.abort();this.danfeSequence=(this.danfeSequence||0)+1;this.pendingDanfeDelivery=null;
     document.getElementById('danfe-dropzone').style.display = 'flex';
     document.getElementById('danfe-preview-area').style.display = 'none';
     document.getElementById('ai-loading-danfe').style.display = 'none';
@@ -826,6 +911,8 @@ class DeliveryPlanner {
     const loadingEl = document.getElementById('search-loading');
 
     clearTimeout(this.searchDebounceTimer);
+    this.searchAbort?.abort();this.searchAbort=new AbortController();
+    const sequence=this.searchSequence=(this.searchSequence||0)+1;
 
     if (!query || query.trim().length === 0) {
       this.loadDefaultSearchSuggestions();
@@ -836,8 +923,10 @@ class DeliveryPlanner {
 
     this.searchDebounceTimer = setTimeout(async () => {
       try {
-        const response = await window.entregasFetch(`api/search_company.php?q=${encodeURIComponent(query.trim())}`);
+        const response = await window.entregasFetch(`api/search_company.php?mode=catalog&q=${encodeURIComponent(query.trim())}`,{signal:this.searchAbort.signal});
         const data = await response.json();
+        if(sequence!==this.searchSequence)return;
+        if(!response.ok)throw new Error(data.error||'Falha na consulta ao catálogo.');
         loadingEl.style.display = 'none';
 
         if (data.success && data.results && data.results.length > 0) {
@@ -850,18 +939,19 @@ class DeliveryPlanner {
           `;
         }
       } catch (err) {
-        loadingEl.style.display = 'none';
-        console.error('Erro na busca:', err);
+        if(err.name!=='AbortError'&&sequence===this.searchSequence){loadingEl.style.display='none';listEl.textContent='Não foi possível consultar o catálogo. Tente novamente.';}
       }
     }, 350);
   }
 
   async loadDefaultSearchSuggestions() {
+    const sequence=this.searchSequence=(this.searchSequence||0)+1;
     const listEl = document.getElementById('search-results-list');
     try {
-      const response = await window.entregasFetch('api/search_company.php');
+      const response = await window.entregasFetch('api/search_company.php?mode=catalog');
       const data = await response.json();
-      if (data.success && data.results) {
+      if(sequence!==this.searchSequence)return;
+      if (response.ok && data.success && data.results) {
         this.renderSearchResults(data.results);
       }
     } catch (e) {
@@ -882,7 +972,7 @@ class DeliveryPlanner {
           <p>${this.escapeHtml(item.logradouro || '')}${item.numero ? ', ' + this.escapeHtml(item.numero) : ''} • ${this.escapeHtml(item.bairro || 'Panambi')}</p>
         </div>
         <button style="background: var(--accent-emerald); border: none; color: #fff; padding: 6px 12px; border-radius: 6px; font-weight: 700; font-size: 11px; cursor: pointer;">
-          + Adicionar
+          Conferir endereço
         </button>
       `;
 
@@ -896,55 +986,10 @@ class DeliveryPlanner {
   }
 
   async addDeliveryFromCompany(comp) {
-    let lat = parseFloat(comp.lat);
-    let lon = parseFloat(comp.lon);
+    // Selecting a source record creates a delivery snapshot only after operator review.
+    this.fillManualFormWithCompany(comp);
+    this.openModal('modal-create-delivery');this.switchCreateTab('manual');
 
-    const isGeneric = isNaN(lat) || isNaN(lon) || !lat || !lon ||
-      (Math.abs(lat - (-28.2917)) < 0.001 && Math.abs(lon - (-53.5019)) < 0.001);
-
-    if (isGeneric && comp.logradouro) {
-      try {
-        const query = `${comp.logradouro}${comp.numero ? ', ' + comp.numero : ''}`;
-        const res = await window.entregasFetch(`api/geocode.php?q=${encodeURIComponent(query)}&cidade=${encodeURIComponent(comp.municipio || 'Panambi')}&uf=${encodeURIComponent(comp.uf || 'RS')}`);
-        const data = await res.json();
-        if (data && data.success && data.lat && data.lon) {
-          lat = parseFloat(data.lat);
-          lon = parseFloat(data.lon);
-        }
-      } catch (e) {
-        console.warn('Falha no geocode online da empresa:', e);
-      }
-
-      if (isNaN(lat) || isNaN(lon) || !lat || !lon || (Math.abs(lat - (-28.2917)) < 0.001 && Math.abs(lon - (-53.5019)) < 0.001)) {
-        alert('Endereço sem localização confiável. Informe coordenadas verificadas no cadastro manual.');
-        return;
-      }
-    }
-
-    if (!Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat)>90 || Math.abs(lon)>180) {
-      alert('Empresa sem coordenadas verificadas. Utilize o cadastro manual.'); return;
-    }
-    const delivery = {
-      id: 'del_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
-      destinatario: comp.nome || comp.fantasia,
-      nome_fantasia: comp.fantasia || comp.nome,
-      numero_nota: '',
-      itens_resumo: '',
-      logradouro: comp.logradouro || '',
-      numero: comp.numero || '',
-      bairro: comp.bairro || '',
-      municipio: comp.municipio || 'Panambi',
-      uf: comp.uf || 'RS',
-      cep: comp.cep || '',
-      endereco_completo: `${comp.logradouro || ''}, ${comp.numero || ''} - ${comp.bairro || ''}, ${comp.municipio || 'Panambi'}`,
-      lat: lat || -28.2917,
-      lon: lon || -53.5019,
-      geocoded_by: 'nominatim_verified',
-      status: 'pending',
-      created_at: new Date().toISOString()
-    };
-
-    this.addDelivery(delivery);
   }
 
   // =========================================================================
@@ -1049,80 +1094,51 @@ class DeliveryPlanner {
   }
 
   // =========================================================================
-  // SEED DE TESTE INICIAL
-  // =========================================================================
-  checkFirstRunSeed() {
-    // Se não tiver nenhuma entrega salva ainda, adiciona exemplos reais de Panambi
-    if (this.deliveries.length === 0) {
-      const sampleStop1 = {
-        id: 'del_sample_452',
-        destinatario: 'EMPRESA GRÁFICA PANAMBI LTDA',
-        nome_fantasia: 'Gráfica Panambi',
-        numero_nota: '000.000.452',
-        serie: '2',
-        emitente: 'LOTUS PRODUTOS DESCARTAVEIS LTDA.',
-        cnpj: '87.548.137/0001-63',
-        logradouro: 'Avenida Konrad Adenauer',
-        numero: '564',
-        bairro: 'Moinho Velho',
-        municipio: 'Panambi',
-        uf: 'RS',
-        cep: '98280-000',
-        endereco_completo: 'Av. Konrad Adenauer, 564 - Moinho Velho, Panambi - RS',
-        itens_resumo: 'PLÁSTICO BOLHA 50 MICRAS (1 rolo)',
-        lat: -28.29653,
-        lon: -53.50758,
-        status: 'pending',
-        created_at: new Date().toISOString()
-      };
-
-      const sampleStop2 = {
-        id: 'del_sample_cotripal',
-        destinatario: 'COTRIPAL AGROPECUÁRIA COOPERATIVA',
-        nome_fantasia: 'Cotripal Supermercado',
-        numero_nota: '000.000.453',
-        serie: '2',
-        emitente: 'PLASWILL INDÚSTRIA LTDA.',
-        cnpj: '91.803.784/0001-70',
-        logradouro: 'Avenida Presidente Kennedy',
-        numero: '2307',
-        bairro: 'Centro',
-        municipio: 'Panambi',
-        uf: 'RS',
-        cep: '98280-000',
-        endereco_completo: 'Av. Presidente Kennedy, 2307 - Centro, Panambi - RS',
-        itens_resumo: 'BOBINA FILME STRETCH 500MM (4 un)',
-        lat: -28.2885,
-        lon: -53.5042,
-        status: 'delivered',
-        created_at: new Date().toISOString()
-      };
-
-      this.deliveries.push(sampleStop1, sampleStop2);
-      this.saveDeliveries();
-      console.log('DEBUG_WIDTH:', window.innerWidth, 'MATCH_480:', window.matchMedia('(max-width: 480px)').matches);
-    this.renderStopsList();
-      this.updateMapMarkers();
-    }
-  }
-
-  // =========================================================================
   // PERSISTÊNCIA LOCAL
   // =========================================================================
   loadDeliveries() {
     try {
       const data = localStorage.getItem(this.storageKey);
-      return data ? JSON.parse(data) : [];
+      const stops = data ? JSON.parse(data) : [];
+      if (!Array.isArray(stops) || stops.some(s => !s || typeof s !== 'object' || typeof s.id !== 'string')) throw new Error('cache');
+      return stops;
     } catch (e) {
+      this.localReadError = true;
       return [];
     }
   }
 
+  showLocalStorageState() {
+    const message = document.getElementById('local-storage-feedback');
+    if (!message) return;
+    const text = this.routeLoadFailed ? 'Não foi possível carregar a rota solicitada. Os dados locais foram preservados e não representam esta rota. Recarregue após restabelecer o acesso.' :
+      this.localReadError ? 'Não foi possível ler o rascunho local. O conteúdo original foi preservado; baixe a cópia para revisão antes de recuperar este navegador.' :
+      this.localWriteError ? 'Não foi possível salvar no navegador. As alterações estão somente nesta página; baixe uma cópia antes de sair. Isso não confirma salvamento no servidor.' : '';
+    message.hidden = !text;
+    message.querySelector('span').textContent = text;
+  }
+
+  downloadLocalRecovery() {
+    let content;
+    try { content = this.localReadError ? localStorage.getItem(this.storageKey) : JSON.stringify(this.deliveries, null, 2); }
+    catch (_) { alert('O armazenamento local está indisponível. Não foi possível baixar o conteúdo original.'); return; }
+    const url = URL.createObjectURL(new Blob([content ?? ''], {type:'application/json'}));
+    const link = document.createElement('a');link.href = url;link.download = 'recuperacao-local-entregas.json';link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
   saveDeliveries() {
+    document.body.classList.remove('document-print-ready');
+    if (this.localReadError || this.routeLoadFailed) { this.showLocalStorageState(); return false; }
     try {
       localStorage.setItem(this.storageKey, JSON.stringify(this.deliveries));
+      this.localWriteError = false;
+      this.showLocalStorageState();
+      return true;
     } catch (e) {
-      console.warn('Falha ao salvar no localStorage:', e);
+      this.localWriteError = true;
+      this.showLocalStorageState();
+      return false;
     }
   }
 
@@ -1139,6 +1155,7 @@ class DeliveryPlanner {
   // EXPORTAÇÃO, COMPARTILHAMENTO E IMPRESSÃO (URL, WHATSAPP, QR CODE & A4)
   // =========================================================================
   async openExportModal() {
+    if (this.sharingLegacy || this.finishingLegacy) return;
     if (this.deliveries.length === 0) {
       alert('Adicione pelo menos 1 entrega à rota antes de exportar.');
       return;
@@ -1146,6 +1163,7 @@ class DeliveryPlanner {
 
     const btn = document.querySelector('.btn-export-header');
     if (btn) btn.style.opacity = '0.5';
+    this.sharingLegacy = true;
 
     try {
       let res;
@@ -1168,21 +1186,46 @@ class DeliveryPlanner {
         if (!response.ok || !res.success) throw new Error(res.error || 'Falha ao emitir acesso');
         res.route_id = this.currentRouteId;
       } else {
-        const response = await window.entregasFetch('api/save_route.php', {
-          method:'POST',headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({stops:this.deliveries,origin:this.currentOrigin})
-        });
-        res = await response.json();
-        if (!response.ok || !res.success) throw new Error(res.error || 'Falha ao salvar rota');
+        res = await this.saveLegacyRoute({stops:this.deliveries,origin:this.currentOrigin});
       }
       this.currentRouteId = res.route_id;
       localStorage.setItem('plaswill_active_route_id', this.currentRouteId);
-      this.presentShareUrl(res.share_url || ('motorista.html?r=' + res.route_id));
+      if (!res.share_url) {
+        this.clearShareUrl();
+        alert('O despacho anterior foi confirmado e a mesma rota foi recuperada. Clique em Compartilhar para emitir um novo acesso; o anterior será revogado.');
+        return;
+      }
+      this.presentShareUrl(res.share_url);
     } catch (err) {
       alert('Erro ao gerar link de compartilhamento: ' + err.message);
     } finally {
+      this.sharingLegacy = false;
       if (btn) btn.style.opacity = '1';
     }
+  }
+
+  async saveLegacyRoute(body) {
+    if (this.localReadError || this.routeLoadFailed) throw new Error('Recupere os dados locais ou a rota antes de despachar.');
+    const key = 'plaswill_pending_dispatch_v1';
+    let pending;
+    try { pending = JSON.parse(localStorage.getItem(key) || 'null'); }
+    catch (_) { throw new Error('Não foi possível ler o envio pendente. Preserve a cópia local para revisão antes de despachar.'); }
+    const serialized = JSON.stringify(body);
+    if (pending && (typeof pending.operation_id !== 'string' || pending.body !== serialized)) throw new Error('Existe um envio sem confirmação com outro planejamento. Preserve os dados e recupere esse envio antes de criar outra rota.');
+    if (!pending) {
+      pending = {operation_id:crypto.randomUUID(),body:serialized};
+      try { localStorage.setItem(key, JSON.stringify(pending)); }
+      catch (_) { throw new Error('Não foi possível preservar o identificador de envio no navegador. Nenhuma rota foi criada.'); }
+    }
+    const response = await window.entregasFetch('api/save_route.php', {
+      method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...body,operation_id:pending.operation_id})
+    });
+    const result = await response.json();
+    if (!response.ok || result.success !== true || !/^ROT-[A-Z0-9]{4}$/.test(result.route_id) || result.total_stops !== body.stops.length) throw new Error(result.error || 'Não foi possível confirmar o despacho. O identificador foi preservado para repetir com segurança.');
+    this.currentRouteId = result.route_id;
+    try { localStorage.setItem('plaswill_active_route_id', result.route_id); localStorage.removeItem(key); }
+    catch (_) { this.localWriteError = true; this.showLocalStorageState(); }
+    return result;
   }
 
   clearShareUrl() {
@@ -1194,7 +1237,12 @@ class DeliveryPlanner {
   }
 
   presentShareUrl(shareUrl) {
-      this.currentShareUrl = new URL(shareUrl, window.location.href).href;
+      this.clearShareUrl();
+      if (typeof shareUrl !== 'string') throw new Error('O servidor não retornou um acesso válido para o motorista.');
+      const url = new URL(shareUrl, window.location.href);
+      const target = new URL('motorista.html', window.location.href);
+      if (url.origin !== target.origin || url.pathname !== target.pathname || url.searchParams.get('r') !== this.currentRouteId || !/^#token=[a-f0-9]{64}$/.test(url.hash)) throw new Error('Link do motorista incompatível com a rota selecionada.');
+      this.currentShareUrl = url.href;
 
       // Preenche o campo de URL
       const urlInput = document.getElementById('export-share-url-input');
@@ -1229,20 +1277,7 @@ class DeliveryPlanner {
         });
       }
 
-      // Gera o QR Code na folha de impressão
-      const printQr = document.getElementById('print-qrcode-canvas');
-      if (printQr && typeof QRCode !== 'undefined') {
-        printQr.innerHTML = '';
-        new QRCode(printQr, {
-          text: this.currentShareUrl,
-          width: 90,
-          height: 90,
-          colorDark: '#000000',
-          colorLight: '#ffffff',
-          correctLevel: QRCode.CorrectLevel.M
-        });
-      }
-
+      // Printed documents do not embed driver credentials; sharing remains a separate action.
       this.openModal('modal-export-route');
   }
 
@@ -1271,70 +1306,122 @@ class DeliveryPlanner {
     }
   }
 
-  printRomaneio() {
-    // Preenche cabeçalho do romaneio
-    document.getElementById('print-route-code').textContent = this.currentRouteId || 'ROT-0001';
-    document.getElementById('print-route-date').textContent = new Date().toLocaleDateString('pt-BR') + ' ' + new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-    document.getElementById('print-route-origin').textContent = this.currentOrigin.name || 'Plaswill Indústria';
-    document.getElementById('print-route-total').textContent = this.deliveries.length;
+  async printRomaneio() {
+    return this.printDocument('romaneio');
+  }
 
-    // Preenche tabela
-    const tbody = document.getElementById('print-table-body');
-    tbody.innerHTML = '';
+  async printReport() {
+    return this.printDocument('report');
+  }
 
-    this.deliveries.forEach((del, idx) => {
-      const tr = document.createElement('tr');
-      tr.innerHTML = `
-        <td style="text-align: center; font-weight: bold; background: #f8fafc;">${idx + 1}</td>
-        <td><b>${this.escapeHtml(del.numero_nota || '-')}</b></td>
-        <td><b>${this.escapeHtml(del.destinatario || del.nome_fantasia || '-')}</b></td>
-        <td>${this.escapeHtml(del.endereco_completo || del.logradouro || '-')}</td>
-        <td>${this.escapeHtml(del.itens_resumo || (del.volumes != null ? `${del.volumes} ${del.volumes === 1 ? 'volume' : 'volumes'}` : '1 volume'))}</td>
-        <td style="border-bottom: 1px dotted #94a3b8; height: 32px;"></td>
-      `;
-      tbody.appendChild(tr);
-    });
-
-    window.print();
+  async printDocument(kind) {
+    if (this.printingDocument) return false;
+    this.printingDocument = true;
+    document.body.classList.remove('document-print-ready');
+    document.getElementById('print-table-body').replaceChildren();
+    document.getElementById('print-qrcode-canvas').replaceChildren();
+    const feedback = document.getElementById('document-feedback');
+    if (feedback) feedback.textContent = 'Consultando os dados salvos no servidor…';
+    const manager = window.routineManager;
+    const routineId = manager?.current?.routine_id || null;
+    const routeId = this.currentRouteId || null;
+    const editablePending = () => manager && (manager.dirty || manager.saving || manager.resolving || manager.pendingConflict);
+    try {
+      if (!routineId && !routeId) throw new Error('Salve uma rotina no servidor antes de gerar documentos. O planejamento apenas local não é um despacho.');
+      if (editablePending()) throw new Error('Existem alterações locais ou conflito. Salve e confira a versão do servidor antes de gerar o documento.');
+      const read = async path => {
+        const response = await window.entregasFetch(path, {cache:'no-store'});
+        const data = await response.json();
+        if (!response.ok || data.success !== true) throw new Error(data.error || 'Não foi possível consultar os dados do documento.');
+        return data;
+      };
+      let routine = null, route = null;
+      if (routineId) {
+        routine = (await read('api/routine_read.php?id=' + encodeURIComponent(routineId))).routine;
+        if (routine?.routine_id !== routineId || (routine.route_id || null) !== routeId) throw new Error('A associação da rotina mudou. Reabra a rotina antes de imprimir.');
+      } else {
+        route = (await read('api/get_route.php?r=' + encodeURIComponent(routeId))).route;
+        if (route?.route_id !== routeId) throw new Error('A resposta não corresponde à rota selecionada.');
+        if (route.routine_id) {
+          routine = (await read('api/routine_read.php?id=' + encodeURIComponent(route.routine_id))).routine;
+          if (routine?.routine_id !== route.routine_id || routine.route_id !== routeId) throw new Error('A associação da rota não pôde ser confirmada.');
+        }
+      }
+      if ((manager?.current?.routine_id || null) !== routineId || (this.currentRouteId || null) !== routeId || editablePending()) throw new Error('A seleção ou o planejamento mudou durante a consulta. Confira a rotina e tente novamente.');
+      const record = routine || route;
+      if (!record || !Array.isArray(record.stops) || record.stops.some(stop => !stop || typeof stop.id !== 'string')) throw new Error('Documento recebido sem entregas válidas.');
+      if (kind === 'romaneio' && !routeId) throw new Error('A rotina ainda não foi despachada. Use Exportar relatório para consultar o planejamento salvo.');
+      const names = {draft:'Rascunho', planned:'Planejada', dispatched:'Despachada', in_progress:'Em andamento', finished:'Finalizada', cancelled:'Cancelada'};
+      const status = routine?.status || route?.status || 'dispatched';
+      const set = (id, value) => document.getElementById(id).textContent = value === null || value === undefined || value === '' ? 'Não informado' : String(value);
+      set('print-document-title', kind === 'romaneio' ? 'ROMANEIO DE ENTREGAS' : 'RELATÓRIO DA ROTINA');
+      set('print-document-state', names[status] || status);
+      set('print-document-notice', status === 'cancelled' ? 'CANCELADA — DOCUMENTO PARA CONFERÊNCIA, NÃO UTILIZAR PARA ENTREGA' : !routeId ? 'PLANEJAMENTO SALVO — NÃO DESPACHADO' : status === 'finished' ? 'FINALIZADA — DOCUMENTO PARA CONSULTA' : 'Dados confirmados no servidor');
+      set('print-route-code', routeId || 'Não despachada');
+      set('print-routine-code', routine?.routine_id || 'Rota legada sem rotina vinculada');
+      set('print-routine-name', routine?.name || 'Não informado');
+      const operational = routine?.scheduled_date || route?.created_at;
+      const date = operational && /^\d{4}-\d{2}-\d{2}$/.test(operational) ? new Date(operational + 'T12:00:00') : new Date(operational || '');
+      set('print-route-date', Number.isNaN(date.getTime()) ? 'Não informada' : date.toLocaleDateString('pt-BR'));
+      set('print-driver', record.motorista);
+      set('print-vehicle', record.veiculo);
+      set('print-route-origin', [record.origin?.name, record.origin?.address].filter(Boolean).join(' — '));
+      set('print-route-total', record.stops.length);
+      const delivered = record.stops.filter(stop => stop.status === 'delivered').length;
+      const percent = record.stops.length ? Math.round(delivered * 1000 / record.stops.length) / 10 : 0;
+      set('print-progress', `${delivered} / ${record.stops.length} entregues · ${record.stops.length - delivered} pendentes · ${percent}%`);
+      set('print-notes', [record.notes, record.observacoes_fechamento, record.cancellation_reason].filter(Boolean).join(' / '));
+      set('print-issued-at', new Date().toLocaleString('pt-BR'));
+      document.getElementById('print-signature-fields').hidden = kind !== 'romaneio';
+      const tbody = document.getElementById('print-table-body');
+      const columns = ['#','NF-e','Destinatário','Endereço completo','Mercadorias / volumes',kind === 'romaneio' ? 'Conferência / assinatura' : 'Situação / observações'];
+      document.getElementById('print-table-head').replaceChildren(...columns.map(label => { const th = document.createElement('th');th.textContent = label;return th; }));
+      record.stops.forEach((stop, index) => {
+        const tr = document.createElement('tr');
+        const address = [stop.logradouro, stop.numero, stop.complemento, stop.bairro, stop.municipio, stop.uf, stop.cep].filter(Boolean).join(', ') || stop.endereco_completo || 'Não informado';
+        const cargo = [stop.itens_resumo, stop.volumes === null || stop.volumes === undefined ? 'Volumes não informados' : `${stop.volumes} ${stop.volumes === 1 ? 'volume' : 'volumes'}`].filter(Boolean).join(' / ');
+        const values = [index + 1, stop.numero_nota || 'Não informada', stop.destinatario || stop.nome_fantasia || 'Não informado', address, cargo,
+          kind === 'romaneio' ? [stop.observacoes, 'Conferido por: __________________'].filter(Boolean).join(' / ') : [stop.status === 'delivered' ? 'Entregue' : 'Pendente', stop.observacoes].filter(Boolean).join(' / ')];
+        for (const value of values) { const td = document.createElement('td');td.textContent = value;tr.appendChild(td); }
+        tbody.appendChild(tr);
+      });
+      document.body.classList.add('document-print-ready');
+      if (feedback) feedback.textContent = 'Documento preparado com os dados confirmados no servidor. Escolha a impressora ou Salvar como PDF.';
+      window.print();
+      return true;
+    } catch (error) {
+      if (feedback) feedback.textContent = error.message;
+      alert(error.message);
+      return false;
+    } finally { this.printingDocument = false; }
   }
 
   async checkUrlParams() {
     const params = new URLSearchParams(window.location.search);
-    const routeId = params.get('r') || params.get('id');
-
+    const routeId = params.get('r') || params.get('id') || (!params.has('routine') ? this.currentRouteId : null);
     if (!routeId) return false;
-    if (!/^ROT-[A-Z0-9]{4}$/.test(routeId)) throw new Error('Rota inválida');
-    this.currentRouteId = routeId;
-
     try {
+      if (!/^ROT-[A-Z0-9]{4}$/.test(routeId)) throw new Error('Rota inválida');
       const response = await window.entregasFetch(`api/get_route.php?r=${encodeURIComponent(routeId)}`);
       const data = await response.json();
-
-      if (data.success && data.route && data.route.stops && data.route.stops.length > 0) {
-        this.deliveries = data.route.stops;
-        if (data.route.origin) {
-          this.currentOrigin = data.route.origin;
-          this.updateOriginMarker();
-        }
-        this.saveDeliveries();
-
-        // Mostra banner de boas-vindas
-        const banner = document.getElementById('route-received-banner');
-        const desc = document.getElementById('route-received-desc');
-        if (banner) {
-          banner.style.display = 'flex';
-          if (desc) {
-            desc.innerHTML = `Rota <b>${routeId}</b> com ${this.deliveries.length} entregas recebida da expedição. <a href="motorista.html?r=${encodeURIComponent(routeId)}" style="color: #FFF212; font-weight: 700; text-decoration: underline; margin-left: 6px;">Abrir no Modo Celular do Motorista</a>`;
-          }
-        }
-
-        return true;
-      }
-    } catch (e) {
-      console.warn('Falha ao carregar rota pela URL:', e);
+      if (!response.ok || data.success !== true || data.route?.route_id !== routeId || !Array.isArray(data.route.stops)) throw new Error('Resposta da rota inválida');
+      this.routeLoadFailed = false;
+      document.body.classList.remove('document-print-ready');
+      this.currentRouteId = routeId;
+      this.deliveries = data.route.stops;
+      if (data.route.origin) { this.currentOrigin = data.route.origin; this.updateOriginMarker(); }
+      // Server reads do not overwrite an unrelated local draft or corrupted recovery copy.
+      const banner = document.getElementById('route-received-banner');
+      const desc = document.getElementById('route-received-desc');
+      if (banner) banner.style.display = 'flex';
+      if (desc) desc.textContent = `Rota ${routeId} carregada do servidor com ${this.deliveries.length} entregas. Use Compartilhar para emitir um acesso autorizado ao motorista.`;
+      return true;
+    } catch (_) {
+      this.routeLoadFailed = true;
+      this.deliveries = [];
+      this.showLocalStorageState();
+      return false;
     }
-
-    return false;
   }
 
   // =========================================================================
@@ -1365,24 +1452,18 @@ class DeliveryPlanner {
   }
 
   async confirmFinishRotina() {
+    if (this.finishingLegacy || this.sharingLegacy) return;
     const total = this.deliveries.length;
     if (total === 0) return;
 
-    const motorista = document.getElementById('finish-driver-name')?.value?.trim() || 'Motorista da Expedição';
-    const veiculo = document.getElementById('finish-vehicle-name')?.value?.trim() || 'Furgão / Utilitário';
+    const motorista = document.getElementById('finish-driver-name')?.value?.trim() || '';
+    const veiculo = document.getElementById('finish-vehicle-name')?.value?.trim() || '';
     const observacoes = document.getElementById('finish-notes')?.value?.trim() || '';
 
+    this.finishingLegacy = true;
     try {
       if (!this.currentRouteId) {
-        const saved = await window.entregasFetch('api/save_route.php', {
-          method: 'POST', headers: {'Content-Type':'application/json'},
-          body: JSON.stringify({stops:this.deliveries,origin:this.currentOrigin,motorista,veiculo})
-        });
-        const data = await saved.json();
-        if (!saved.ok || !data.success) throw new Error(data.error || 'Falha ao salvar rotina');
-        this.currentRouteId = data.route_id;
-        // Retain the authoritative id across closure retries and page reloads.
-        localStorage.setItem('plaswill_active_route_id', this.currentRouteId);
+        await this.saveLegacyRoute({stops:this.deliveries,origin:this.currentOrigin,motorista,veiculo});
       }
       const response = await window.entregasFetch('api/finish_route.php', {
         method: 'POST',
@@ -1397,11 +1478,11 @@ class DeliveryPlanner {
       });
 
       const res = await response.json();
-      if (response.ok && res.success) {
+      if (response.ok && res.success === true && res.route_id === this.currentRouteId && Number.isInteger(res.total_stops) && Number.isInteger(res.delivered_stops) && Number.isInteger(res.pending_stops) && res.delivered_stops + res.pending_stops === res.total_stops) {
         // Limpa estado ativo
         this.deliveries = [];
         this.currentRouteId = null;
-        this.currentShareUrl = null;
+        this.clearShareUrl();
         localStorage.removeItem('plaswill_active_route_id');
         this.saveDeliveries();
 
@@ -1424,6 +1505,8 @@ class DeliveryPlanner {
     } catch (e) {
       console.error('Falha ao finalizar rotina:', e);
       alert('Erro de conexão ao finalizar rotina.');
+    } finally {
+      this.finishingLegacy = false;
     }
   }
 
@@ -1490,12 +1573,17 @@ class DeliveryPlanner {
         return false;
       }
     }
+    const request = this.archiveSequence = (this.archiveSequence || 0) + 1;
+    const snapshot = this.planningContext();
+    const isCurrent = () => request === this.archiveSequence && this.planningContext() === snapshot;
     try {
       if (!/^ROT-[A-Z0-9]{4}$/.test(routeId)) throw new Error('Rota inválida');
       const response = await window.entregasFetch(`api/get_route.php?r=${encodeURIComponent(routeId)}`);
       const data = await response.json();
+      if (!isCurrent()) return false;
       if (response.ok && data.success && data.route?.route_id === routeId && Array.isArray(data.route.stops)) {
         beforeApply();
+        document.body.classList.remove('document-print-ready');
         this.clearShareUrl();
         this.deliveries = data.route.stops;
         this.currentRouteId = routeId;
@@ -1513,12 +1601,14 @@ class DeliveryPlanner {
         alert('Não foi possível carregar os dados desta rota.');
       }
     } catch (e) {
+      if (!isCurrent()) return false;
       alert('Erro ao carregar rota arquivada: ' + e.message);
     }
     return false;
   }
 
   setOrigin(baseId) {
+    if (this.sharingLegacy || this.finishingLegacy) return false;
     if (this.bases[baseId]) {
       this.currentOrigin = this.bases[baseId];
       localStorage.setItem(this.originKey, JSON.stringify(this.currentOrigin));
