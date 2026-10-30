@@ -123,3 +123,18 @@ python3 server.py
 ```
 Acesse no navegador:
 👉 `http://localhost:8085`
+
+## Cache busting e verificação de paridade (obrigatório)
+
+O navegador do operador mantém `app.js`/`style.css` em cache pela query string `?v=`.
+Regra: **toda alteração de conteúdo em um asset exige novo `?v=` no HTML que o referencia**
+e, quando o asset estiver na lista do service worker, novo `CACHE` em `sw.js`.
+
+Checklist de publicação:
+1. Bumpe `?v=` dos arquivos alterados em `index.html` e/ou `motorista.html` (o teste `tests/test_no_demo_markers.py` falha se algum asset ficar sem versão).
+2. Se `motorista.js`, `outbox.js`, `motorista.css` ou o shell mudarem, incremente `plaswill-driver-vN` em `sw.js` e mantenha as queries iguais às do HTML.
+3. Publique e rode `scripts/verify-deploy.sh <origem>` — ele compara o hash de cada asset servido com o do checkout e falha se houver divergência.
+4. Nunca libere operadores com verificação divergente: isso indica deploy parcial ou cache antigo.
+
+Em 26/10/2026 a produção servia `app.js?v=11` com conteúdo anterior às correções enquanto a `main` já usava o mesmo `?v=11` com conteúdo novo (ENT-033). Publicar sem o bump manteria navegadores no código antigo mesmo com o deploy "concluído".
+
