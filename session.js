@@ -33,6 +33,8 @@
     if (target.origin === location.origin && response.status === 503) render('Serviço temporariamente indisponível. Tente novamente.');
     return response;
   };
+  window.corporateSession = () => state;
+  window.corporateSessionReady = ready;
   logout?.addEventListener('click', async () => {
     try {
       const response = await window.entregasFetch('api/auth_logout.php', {method:'POST'});

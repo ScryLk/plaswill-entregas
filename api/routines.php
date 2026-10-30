@@ -207,7 +207,7 @@ function listRoutines(array $query): array {
     foreach (glob(dataDir().'/routines/RUT-*.json') as $file) {
         $r=readDocument($file);$route=findRoutineRoute($r);$r=routineView(reconcileRoutine($r,$route),$route);
         if ($status!=='' && $r['status']!==$status || $from!=='' && $r['scheduled_date']<$from || $to!=='' && $r['scheduled_date']>$to) continue;
-        if ($q!==''&&!str_contains(catalogFold($r['routine_id'].' '.$r['name'].' '.$r['scheduled_date'].' '.implode('/',array_reverse(explode('-',$r['scheduled_date'])))),$q)) continue;
+        if ($q!==''&&!str_contains(catalogFold($r['routine_id'].' '.($r['route_id']??'').' '.$r['name'].' '.($r['created_by']??'').' '.$r['scheduled_date'].' '.implode('/',array_reverse(explode('-',$r['scheduled_date'])))),$q)) continue;
         unset($r['stops']);$rows[]=$r;
     }
     usort($rows,fn($a,$b)=>($order==='asc'?1:-1)*strcmp($a['scheduled_date'],$b['scheduled_date']) ?: strcmp($b['created_at'].$b['routine_id'],$a['created_at'].$a['routine_id']));

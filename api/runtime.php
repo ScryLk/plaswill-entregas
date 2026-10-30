@@ -123,6 +123,8 @@ function createRoute(array $body, ?callable $generator=null, ?string $routineRef
             'veiculo'=>textField($body['veiculo']??''), 'origin'=>$origin,
             'total_stops'=>count($stops),'stops'=>$stops,'version'=>0,
             '_driver'=>['hash'=>hash('sha256',$token),'expires_at'=>time()+7*86400,'revoked'=>false]];
+        $actor = $dispatchActor ?? ($creation['actor'] ?? (requestPrincipal()['id'] ?? null));
+        if ($actor !== null && $actor !== '') $r['created_by'] = $actor;
         if ($routineRef!==null) { $r['routine_id']=$routineRef;$r['_dispatch_actor']=$dispatchActor; }
         if ($creation!==null) $r['_create']=$creation;
         atomicDocument(routePath($id),$r);
@@ -138,7 +140,7 @@ function historyRows(): array {
     foreach (glob(dataDir().'/routes/ROT-*.json') as $path) {
         $r=readDocument($path);
         if (($r['status']??'')!=='finished') continue;
-        $row=array_intersect_key($r,array_flip(['route_id','created_at','finished_at','motorista','veiculo','total_stops','delivered_stops','pending_stops','completion_rate','status']));
+        $row=array_intersect_key($r,array_flip(['route_id','created_at','finished_at','motorista','veiculo','total_stops','delivered_stops','pending_stops','completion_rate','status','created_by']));
         $row['data_formatada']=$r['finished_data_formatada']; $byId[$r['route_id']]=$row;
     }
     $rows=array_values($byId); usort($rows,fn($a,$b)=>strcmp($b['finished_at'],$a['finished_at']));

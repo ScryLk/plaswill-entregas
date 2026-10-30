@@ -182,7 +182,7 @@
         this.$('routine-list-body').replaceChildren();
         for(const r of data.results) {
           const row=node('tr',null,{'data-routine-id':r.routine_id});
-          const label=node('td',r.name);label.append(node('small',r.routine_id));row.append(label);
+          const label=node('td',r.name);label.append(node('small',r.routine_id + (r.created_by ? ` • Por: ${r.created_by}` : '')));row.append(label);
           for(const value of [shortDate(r.scheduled_date),r.origin.name||'Origem',r.motorista||'A definir',r.veiculo||'A definir',r.destinations,r.total_stops])row.append(node('td',String(value)));
           const progress=node('td',`${r.delivered_stops} / ${r.total_stops}`);progress.append(node('progress',null,{max:100,value:r.completion_rate,'aria-label':`${r.completion_rate}% concluído`}));row.append(progress);
           const status=node('td',null);status.append(node('span',names[r.status],{class:'routine-pill','data-status':r.status}));row.append(status);

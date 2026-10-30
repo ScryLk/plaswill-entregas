@@ -47,6 +47,8 @@ class DeliveryPlanner {
     this.searchDebounceTimer = null;
     this.currentActiveId = null;
     this.markerMap = {};
+    this.draftSyncTimer = null;
+    this.canSyncDraft = false;
 
     this.ready = this.init();
   }
@@ -72,6 +74,7 @@ class DeliveryPlanner {
     });
     this.renderStopsList();
     this.updateMapMarkers();
+    await this.initUserDraft();
 
     const urlParams = new URLSearchParams(window.location.search);
     const targetModal = urlParams.get('modal');
@@ -479,6 +482,7 @@ class DeliveryPlanner {
     if (!confirm('Tem certeza que deseja limpar todas as entregas do dia?')) return;
     this.deliveries = [];
     this.saveDeliveries();
+    this.clearServerDraft();
     this.renderStopsList();
     this.updateMapMarkers();
   }
@@ -1127,18 +1131,81 @@ class DeliveryPlanner {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
-  saveDeliveries() {
+  saveDeliveries(syncServer = true) {
     document.body.classList.remove('document-print-ready');
     if (this.localReadError || this.routeLoadFailed) { this.showLocalStorageState(); return false; }
     try {
       localStorage.setItem(this.storageKey, JSON.stringify(this.deliveries));
       this.localWriteError = false;
       this.showLocalStorageState();
+      if (syncServer && this.canSyncDraft && !window.routineManager?.current) {
+        this.scheduleServerDraftSync();
+      }
       return true;
     } catch (e) {
       this.localWriteError = true;
       this.showLocalStorageState();
       return false;
+    }
+  }
+
+  scheduleServerDraftSync() {
+    clearTimeout(this.draftSyncTimer);
+    this.draftSyncTimer = setTimeout(async () => {
+      if (!this.canSyncDraft || window.routineManager?.current) return;
+      try {
+        await window.entregasFetch('api/user_draft_write.php', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'save',
+            stops: this.deliveries,
+            origin: this.currentOrigin,
+            active_route_id: this.currentRouteId
+          })
+        });
+      } catch (_) {}
+    }, 600);
+  }
+
+  async clearServerDraft() {
+    clearTimeout(this.draftSyncTimer);
+    if (!this.canSyncDraft) return;
+    try {
+      await window.entregasFetch('api/user_draft_write.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'clear' })
+      });
+    } catch (_) {}
+  }
+
+  async initUserDraft() {
+    try {
+      if (window.corporateSessionReady) await window.corporateSessionReady;
+      const res = await window.entregasFetch('api/user_draft_read.php');
+      if (!res.ok) return;
+      const data = await res.json();
+      this.canSyncDraft = true;
+      if (data.success && data.draft && Array.isArray(data.draft.stops) && data.draft.stops.length > 0) {
+        if (!window.routineManager?.current) {
+          if (this.deliveries.length === 0) {
+            this.deliveries = data.draft.stops;
+            if (data.draft.origin) {
+              this.currentOrigin = data.draft.origin;
+              this.updateOriginMarker();
+            }
+            if (data.draft.active_route_id && !this.currentRouteId) {
+              this.currentRouteId = data.draft.active_route_id;
+            }
+            this.renderStopsList();
+            this.updateMapMarkers();
+            this.saveDeliveries(false);
+          }
+        }
+      }
+    } catch (_) {
+      this.canSyncDraft = false;
     }
   }
 
@@ -1225,6 +1292,7 @@ class DeliveryPlanner {
     this.currentRouteId = result.route_id;
     try { localStorage.setItem('plaswill_active_route_id', result.route_id); localStorage.removeItem(key); }
     catch (_) { this.localWriteError = true; this.showLocalStorageState(); }
+    this.clearServerDraft();
     return result;
   }
 
@@ -1545,6 +1613,7 @@ class DeliveryPlanner {
                 <span style="background: ${isComplete ? 'rgba(16,185,129,0.15)' : 'rgba(245,158,11,0.15)'}; color: ${rateColor}; border: 1px solid ${rateColor}44; padding: 2px 7px; border-radius: 4px; font-size: 0.72rem; font-weight: 700;">
                   ${item.delivered_stops}/${item.total_stops} (${item.completion_rate}%)
                 </span>
+                ${item.created_by ? `<span style="background: rgba(56,189,248,0.15); color: #38bdf8; border: 1px solid rgba(56,189,248,0.3); padding: 2px 7px; border-radius: 4px; font-size: 0.72rem; font-weight: 600;">Por: ${this.escapeHtml(item.created_by)}</span>` : ''}
               </div>
               <div style="font-size: 0.8rem; color: #cbd5e1;">
                 <b>Motorista:</b> ${this.escapeHtml(item.motorista || 'Expedição')} • <b>Veículo:</b> ${this.escapeHtml(item.veiculo || 'Utilitário')}

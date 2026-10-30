@@ -66,13 +66,13 @@ function rolesPermit(array $roles, string $permission): bool {
 }
 function permissionForEndpoint(): string {
     return match (basename($_SERVER['SCRIPT_NAME'] ?? '')) {
-        'get_route.php', 'routine_read.php' => 'route.read',
+        'get_route.php', 'routine_read.php', 'user_draft_read.php' => 'route.read',
         'get_history.php' => 'history.read',
         'search_company.php' => 'catalog',
         'geocode.php' => 'geocode',
         'optimize_sequence.php' => 'optimize',
         'process_danfe.php' => 'danfe',
-        'save_route.php', 'issue_route_access.php', 'revoke_route.php', 'routine_write.php' => 'dispatch',
+        'save_route.php', 'issue_route_access.php', 'revoke_route.php', 'routine_write.php', 'user_draft_write.php' => 'dispatch',
         'update_route_status.php', 'finish_route.php' => 'route.write',
         default => 'deny',
     };
