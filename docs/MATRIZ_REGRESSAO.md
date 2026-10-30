@@ -1,6 +1,6 @@
 # Matriz de regressão
 
-Base: main c745e43. Execução em PHP local com workers, Chromium/Playwright, Leaflet 1.9.4 com integridade verificada, provider OAuth HTTPS sintético e armazenamento temporário.
+Base inicial: main c745e43; integração final com main 3ca212f, incluindo regressão de geocodificação sem fallback municipal. Execução em PHP local com workers, Chromium/Playwright, Leaflet 1.9.4 com integridade verificada, provider OAuth HTTPS sintético e armazenamento temporário.
 
 ## Fluxos operacionais
 
@@ -21,7 +21,7 @@ Base: main c745e43. Execução em PHP local com workers, Chromium/Playwright, Le
 
 ## Reprodução e execução
 
-Resultado final desta auditoria em 30/10/2026: **50 testes de integração aprovados, zero skips; 17 testes Node aprovados; 45 verificações de sintaxe/consistência aprovadas**. A execução inclui todos os cenários Chromium listados. Baseline original: 26 testes aprovados antes das novas regressões. Os novos casos comprovaram defeitos que a suíte anterior não identificava.
+Resultado final desta auditoria em 30/10/2026: **53 testes de integração aprovados, zero skips; 17 testes Node aprovados; 45 verificações de sintaxe/consistência aprovadas**. A execução inclui todos os cenários Chromium listados. Baseline original: 26 testes aprovados antes das novas regressões. Os novos casos comprovaram defeitos que a suíte anterior não identificava.
 
 Antes: testes novos falharam contra os métodos originais; detalhes por ENT em AUDITORIA_INCONSISTENCIAS.md. Para as duas verificações adicionais de quota/finalização, o app.js original do commit base foi servido exclusivamente pelo router do navegador de teste. Esse recurso não existe no produto.
 

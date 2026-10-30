@@ -3,6 +3,8 @@
 Data: 30/10/2026. Base: main `c745e436d806742cd886d52aa55a7a8dfa0b8f9e`.
 Branch: `fix/auditoria-estabilizacao-entregas`.
 
+Durante a auditoria, main avançou externamente para `3ca212f3bb0b278785209d82c887b089fd57910f`. Essa atualização foi incorporada à branch de revisão, preservando normalização de vias e os arquivos de catálogo recebidos da main sem edição pela auditoria. ENT-031 registra a correção adicional encontrada nessa atualização. Nenhum merge desta auditoria na main foi executado.
+
 ## Escopo e evidência
 
 Inspeção do frontend, API PHP, adaptador Python, documentos, PWA, autenticação, persistência, roteamento, testes e histórico disponível no Git. Baseline executado: 26 testes de integração aprovados, incluindo Chromium, antes de adicionar os casos desta auditoria. Isso não detectava os defeitos abaixo.
@@ -45,6 +47,7 @@ O remoto main foi conferido via Git. Consulta HTTP ao domínio e chamadas da API
 | ENT-028 | Otimização atrasada substitui outro planejamento | P0 | Resolvido |
 | ENT-029 | Histórico atrasado substitui rotina recém-aberta | P1 | Resolvido |
 | ENT-030 | Rota avulsa presume motorista e veículo | P1 | Resolvido |
+| ENT-031 | Falha de endereço substituída por centro municipal deslocado | P0 | Resolvido |
 
 “Resolvido” significa causa confirmada e correção validada em isolamento. Não equivale a produção homologada. “Não reproduzido” não descarta o sintoma observado pelo usuário. Itens dependentes da VPS permanecem bloqueados por dependência externa.
 
@@ -411,6 +414,18 @@ O remoto main foi conferido via Git. Consulta HTTP ao domínio e chamadas da API
 - **Resultado atual:** Regressão aprovada com dados sintéticos.
 
 
+### ENT-031 — Geocodificação retorna centro municipal deslocado
+
+- **Módulo / arquivo e função:** api/config.php: geocodeAddress.
+- **Prioridade / impacto:** P0 — localização inventada pode se tornar destino operacional.
+- **Classificação / situação:** Resolvido / Corrigido e validado localmente.
+- **Passos de reprodução:** simular resposta vazia para todas as consultas por endereço, mas resposta válida para consulta apenas pelo município; executar rua desconhecida e rodovia sem correspondência.
+- **Resultado encontrado:** a atualização externa 3ca212f retornava o centro municipal e deslocava o centro padrão para outro ponto, evitando a detecção de localização genérica.
+- **Resultado esperado / estratégia:** endereço não localizado permanece null para revisão humana; preservar aliases e tentativas estruturadas/textuais por rua/rodovia.
+- **Causa-raiz / evidência:** fallback final por cidade seguido de alteração artificial das coordenadas. Wrapper HTTPS sintético executa a função real sem rede; dois dos três testes falharam antes, os três passaram depois.
+- **Teste de regressão:** tests/test_geocode_precision.py, incluindo caso positivo de normalização.
+- **Resultado atual:** nenhuma consulta somente pelo município ou coordenada deslocada; normalização de vias preservada. Provedor real não foi consultado.
+
 ## Armazenamento e cadastros
 
 Não foi demonstrada necessidade de substituir JSON por preferência arquitetural. O lock estável e a escrita atômica existentes foram preservados. Consultas de rotinas/histórico fazem varreduras e o lock é global: medir p95/p99, duração do lock, bytes/documento, cardinalidade e taxa de escrita antes de decidir sobre índices ou banco. Não houve benchmark de produção. Critérios e limites em PERSISTENCIA_E_RECUPERACAO.md.
@@ -430,6 +445,9 @@ Não excluir por nome, coordenada ou aparência. Em ambiente autorizado, inventa
 - A integração desta branch depende da revisão do PR; não realizar merge automático.
 
 ## Arquivos da entrega
+
+- `api/config.php` — correção adicional da integração.
+- `tests/test_geocode_precision.py` — regressão adicional da integração.
 
 - `DEPLOY.md`
 - `README.md`
