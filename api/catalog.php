@@ -43,6 +43,8 @@ function catalogResults(array $query): array {
         $item['lat']=$record['lat']??null; $item['lon']=$record['lon']??null;
         $item['geocoded_by']=$record['geocoded_by']??'local_db';
         $item['has_coordinates']=verifiedCoordinates($item);
+        $item['source']='corporate_catalog';
+        $item['needs_review']=!$item['has_coordinates'];
         if (!$item['has_coordinates']) { $item['lat']=null; $item['lon']=null; $item['geocoded_by']='unresolved'; }
         if ($item['municipio']!=='') $cities[$item['municipio']]=true;
         if (($city==='' || $city===$item['municipio']) && $item['bairro']!=='') $districts[$item['bairro']]=true;

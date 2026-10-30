@@ -107,7 +107,7 @@ function newCode(): string {
     for ($i=0;$i<4;$i++) $id.=$chars[random_int(0,strlen($chars)-1)];
     return $id;
 }
-function createRoute(array $body, ?callable $generator=null, ?string $routineRef=null, ?string $dispatchActor=null): array {
+function createRoute(array $body, ?callable $generator=null, ?string $routineRef=null, ?string $dispatchActor=null, ?array $creation=null): array {
     $stops=validateStops($body['stops']??null);
     foreach ($stops as &$stop) $stop['version']=0;
     unset($stop);
@@ -119,11 +119,12 @@ function createRoute(array $body, ?callable $generator=null, ?string $routineRef
         if (file_exists(routePath($id))) continue;
         $token=bin2hex(random_bytes(32));
         $r=['route_id'=>$id,'created_at'=>date('c'),'data_formatada'=>date('d/m/Y H:i'),
-            'motorista'=>textField($body['motorista']??'Motorista da Expedição'),
-            'veiculo'=>textField($body['veiculo']??'Furgão / Utilitário'), 'origin'=>$origin,
+            'motorista'=>textField($body['motorista']??''),
+            'veiculo'=>textField($body['veiculo']??''), 'origin'=>$origin,
             'total_stops'=>count($stops),'stops'=>$stops,'version'=>0,
             '_driver'=>['hash'=>hash('sha256',$token),'expires_at'=>time()+7*86400,'revoked'=>false]];
         if ($routineRef!==null) { $r['routine_id']=$routineRef;$r['_dispatch_actor']=$dispatchActor; }
+        if ($creation!==null) $r['_create']=$creation;
         atomicDocument(routePath($id),$r);
         return [$r,$token];
     }

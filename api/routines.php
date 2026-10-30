@@ -106,6 +106,7 @@ function routineView(array $r, ?array $route): array {
     unset($r['_operations'],$r['_create']);
     if ($route!==null) {
         $r['stops']=$route['stops'];
+        if (isset($route['observacoes_fechamento'])) $r['observacoes_fechamento']=$route['observacoes_fechamento'];
         if (($route['status']??'')==='finished') { $r['status']='finished';$r['finished_at']=$route['finished_at']; }
         elseif (($route['status']??'')==='cancelled') $r['status']='cancelled';
         elseif (($route['version']??0)>0 || !empty($route['last_update'])) $r['status']='in_progress';

@@ -9,30 +9,15 @@ if (($_GET['mode']??'')==='catalog') {
 }
 $query = textField($_GET["q"] ?? "", 300);
 if (empty($query)) {
-    // Retorna as empresas da base local como sugestão padrão
-    $companiesFile = (getenv("ENTREGAS_COMPANIES_FILE") ?: __DIR__ . "/companies_db.json");
-    $companies = file_exists($companiesFile) ? json_decode(file_get_contents($companiesFile), true) : [];
-    jsonResponse(["success" => true, "results" => array_slice($companies, 0, 8)]);
+    require_once __DIR__.'/catalog.php';
+    jsonResponse(catalogResults(['per_page'=>'8']));
 }
 
-$results = [];
-
-// 1. Busca na base local de empresas
-$companiesFile = (getenv("ENTREGAS_COMPANIES_FILE") ?: __DIR__ . "/companies_db.json");
-if (file_exists($companiesFile)) {
-    $companies = json_decode(file_get_contents($companiesFile), true) ?: [];
-    foreach ($companies as $comp) {
-        $nameMatch = stripos($comp["nome"], $query) !== false;
-        $fantasyMatch = !empty($comp["fantasia"]) && stripos($comp["fantasia"], $query) !== false;
-        $streetMatch = !empty($comp["logradouro"]) && stripos($comp["logradouro"], $query) !== false;
-        if ($nameMatch || $fantasyMatch || $streetMatch) {
-            $results[] = $comp;
-        }
-    }
-}
+require_once __DIR__.'/catalog.php';
+$results=catalogResults(['q'=>$query,'per_page'=>'20'])['results'];
 
 // 2. Se a busca local não tiver resultados suficientes, consulta o Gemini
-if (GEMINI_API_KEY && count($results) < 3 && strlen($query) >= 3) {
+if (($_GET['ai']??'')==='1' && GEMINI_API_KEY && count($results) < 3 && strlen($query) >= 3) {
     $geminiUrl = "https://generativelanguage.googleapis.com/v1beta/models/" . GEMINI_MODEL . ":generateContent?key=" . GEMINI_API_KEY;
 
     $prompt = <<<PROMPT
@@ -54,7 +39,7 @@ Formato exato:
   }
 ]
 
-Se não conhecer com certeza, retorne a melhor correspondência estimada em Panambi/RS.
+Se não conhecer com certeza, retorne uma lista vazia. Não invente estabelecimentos ou endereços.
 Retorne APENAS o JSON válido, sem markdown ou explicações.
 PROMPT;
 
@@ -88,7 +73,12 @@ PROMPT;
 
         if (is_array($aiList)) {
             foreach ($aiList as $item) {
-                if (empty($item["nome"])) continue;
+                if (!is_array($item) || !is_string($item['nome']??null) || trim($item['nome'])==='') continue;
+                $valid=true;
+                foreach (['nome','fantasia','logradouro','numero','bairro','municipio','uf','cep'] as $key) {
+                    if (isset($item[$key]) && (!is_string($item[$key]) || strlen($item[$key])>500)) { $valid=false;break; }
+                }
+                if (!$valid) continue;
 
                 // Geocodifica para obter coordenadas
                 $streetQuery = trim(($item["logradouro"] ?? "") . ", " . ($item["numero"] ?? "") . ", " . ($item["bairro"] ?? ""));
@@ -109,7 +99,10 @@ PROMPT;
                     "cep" => $item["cep"] ?? "98280-000",
                     "lat" => $lat,
                     "lon" => $lon,
-                    "tipo" => "ai_search"
+                    "tipo" => "ai_search",
+                    "source" => "ai_suggestion",
+                    "needs_review" => true,
+                    "geocoded_by" => $geo ? "nominatim_suggestion" : "unresolved"
                 ];
             }
         }

@@ -122,112 +122,16 @@ if ($response === false || $httpCode !== 200) {
 }
 
 $geminiData = json_decode($response, true);
-$rawText = $geminiData["candidates"][0]["content"]["parts"][0]["text"] ?? "{}";
-$extracted = json_decode($rawText, true);
-
-if (empty($extracted) || empty($extracted["destinatario"])) {
-    jsonResponse([
-        "error" => "Não foi possível extrair os dados da nota fiscal.",
-        "message" => "Resposta de IA inválida."
-    ], 422);
+$rawText = $geminiData["candidates"][0]["content"]["parts"][0]["text"] ?? null;
+require_once __DIR__.'/danfe_delivery.php';
+$companiesFile=getenv('ENTREGAS_COMPANIES_FILE') ?: __DIR__.'/companies_db.json';
+$companies=is_file($companiesFile)?json_decode(file_get_contents($companiesFile),true,64,JSON_THROW_ON_ERROR):[];
+if (!is_array($companies) || !array_is_list($companies)) throw new RuntimeException('catalog');
+try {
+    if (!is_string($rawText)) throw new InvalidArgumentException('response');
+    $extracted=json_decode($rawText,true,64,JSON_THROW_ON_ERROR);
+    $delivery=danfeDelivery($extracted,$companies,'geocodeAddress');
+} catch (InvalidArgumentException|JsonException $e) {
+    jsonResponse(['error'=>'Não foi possível extrair dados válidos da nota fiscal. Confira a imagem e tente novamente.'],422);
 }
-
-// 3. Geocodificação das Coordenadas (Lat / Lon)
-$municipio = $extracted["endereco"]["municipio"] ?? "Panambi";
-$uf = $extracted["endereco"]["uf"] ?? "RS";
-$logradouro = $extracted["endereco"]["logradouro"] ?? "";
-$numero = $extracted["endereco"]["numero"] ?? "";
-$bairro = $extracted["endereco"]["bairro"] ?? "";
-$destinatario = $extracted["destinatario"] ?? "";
-
-// A) Tenta na base local de empresas primeiro
-$companiesFile = __DIR__ . "/companies_db.json";
-$matchedCompany = null;
-if (file_exists($companiesFile)) {
-    $companies = json_decode(file_get_contents($companiesFile), true) ?: [];
-    foreach ($companies as $comp) {
-        $nameMatch = stripos($destinatario, $comp["nome"]) !== false || stripos($comp["nome"], $destinatario) !== false;
-        $fantasyMatch = !empty($comp["fantasia"]) && stripos($destinatario, $comp["fantasia"]) !== false;
-        if ($nameMatch || $fantasyMatch) {
-            $matchedCompany = $comp;
-            break;
-        }
-    }
-}
-
-$lat = null;
-$lon = null;
-$geocodedBy = "approximate";
-
-// Se a empresa na base local tiver coordenadas válidas que NÃO sejam as coordenadas genéricas do centro
-$isGenericDbCoord = false;
-if ($matchedCompany && isset($matchedCompany["lat"], $matchedCompany["lon"])) {
-    $cLat = (float) $matchedCompany["lat"];
-    $cLon = (float) $matchedCompany["lon"];
-    if (abs($cLat - PANAMBI_DEFAULT_LAT) < 0.0001 && abs($cLon - PANAMBI_DEFAULT_LON) < 0.0001) {
-        $isGenericDbCoord = true;
-    }
-}
-
-if ($matchedCompany && isset($matchedCompany["lat"], $matchedCompany["lon"]) && !$isGenericDbCoord) {
-    $lat = (float) $matchedCompany["lat"];
-    $lon = (float) $matchedCompany["lon"];
-    $geocodedBy = "local_db";
-} else {
-    // B) Consulta Nominatim com endereço completo
-    $addressQuery = trim("{$logradouro}, {$numero}, {$bairro}");
-    $geoResult = geocodeAddress($addressQuery, $municipio, $uf);
-    if ($geoResult) {
-        $lat = $geoResult["lat"];
-        $lon = $geoResult["lon"];
-        $geocodedBy = "nominatim_exact";
-    } else {
-        // Tenta apenas com Rua e Cidade
-        $geoResultRua = geocodeAddress("{$logradouro}", $municipio, $uf);
-        if ($geoResultRua) {
-            $lat = $geoResultRua["lat"];
-            $lon = $geoResultRua["lon"];
-            $geocodedBy = "nominatim_street";
-        } else {
-            // Coordenadas com pequeno deslocamento radial para nunca colidir
-            $angle = mt_rand(0, 360) * (M_PI / 180);
-            $dist = 0.003 + (mt_rand(0, 20) / 10000);
-            $lat = PANAMBI_DEFAULT_LAT + (sin($angle) * $dist);
-            $lon = PANAMBI_DEFAULT_LON + (cos($angle) * $dist);
-            $geocodedBy = "default_center_jitter";
-        }
-    }
-}
-
-// 4. Montar o Objeto Padronizado da Entrega
-$deliveryId = "del_" . uniqid() . "_" . mt_rand(100, 999);
-$addressDisplay = trim("{$logradouro}, {$numero}" . ($bairro ? " - {$bairro}" : "") . ", {$municipio} - {$uf}");
-
-$delivery = [
-    "id" => $deliveryId,
-    "destinatario" => $destinatario,
-    "nome_fantasia" => $extracted["nome_fantasia"] ?? $destinatario,
-    "numero_nota" => $extracted["numero_nota"] ?? "",
-    "serie" => $extracted["serie"] ?? "",
-    "emitente" => $extracted["emitente"] ?? "",
-    "cnpj" => $extracted["cnpj_destinatario"] ?? "",
-    "logradouro" => $logradouro,
-    "numero" => $numero,
-    "bairro" => $bairro,
-    "municipio" => $municipio,
-    "uf" => $uf,
-    "cep" => $extracted["endereco"]["cep"] ?? "",
-    "endereco_completo" => $addressDisplay,
-    "itens_resumo" => $extracted["itens_resumo"] ?? "",
-    "observacoes" => $extracted["observacoes_entrega"] ?? "",
-    "lat" => $lat,
-    "lon" => $lon,
-    "status" => "pending", // pending | delivered
-    "geocoded_by" => $geocodedBy,
-    "created_at" => date("c")
-];
-
-jsonResponse([
-    "success" => true,
-    "delivery" => $delivery
-]);
+jsonResponse(['success'=>true,'delivery'=>$delivery]);
